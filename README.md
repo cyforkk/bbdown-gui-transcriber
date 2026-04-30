@@ -1,213 +1,163 @@
-# BBDown 哔哩哔哩下载脚本
+# BBDown 哔哩哔哩下载工具
 
-这是一个基于本机 `BBDown` 的 Python 跨平台下载脚本，支持两种下载来源：
+这是一个基于本机 `BBDown` 的 Python/Tkinter 下载工具，支持 GUI、命令行脚本和 exe 版本。
 
-- 收藏夹批量下载
-- 单个视频下载
+## 推荐使用
 
-主脚本：
+最终用户推荐直接运行：
 
 ```text
-download_bilibili_fav.py
+release\BilibiliDownloaderUI.exe
 ```
 
-## 功能
+## 当前目录结构
 
-- 根据哔哩哔哩收藏夹链接自动解析 `fid`。
-- 自动分页获取收藏夹内全部视频。
-- 支持单个视频链接或 BV 号下载。
-- 支持音频/视频二选一下载：
-  - `audio`：只下载音频。
-  - `video`：下载视频。
-- 支持指定下载目录。
-- 收藏夹批量下载时，单个视频失效或下载失败会自动跳过，不中断后续任务。
-- 下载完成后输出统计信息：总数、成功数、失败数、失败列表。
-- 提供 Python 单元测试。
+```text
+D:\bbdown脚本\
+├─ release\
+│  └─ BilibiliDownloaderUI.exe      # 推荐分发/使用的最终 exe
+├─ dist\
+│  └─ BilibiliDownloaderUI.exe      # PyInstaller 原始输出 exe
+├─ download_bilibili_fav.py         # Python 核心下载逻辑
+├─ bilibili_downloader_ui.py        # Tkinter GUI 源码
+├─ build_exe.py                     # exe 打包脚本
+├─ test_download_bilibili_fav.py    # 核心逻辑测试
+├─ test_bilibili_downloader_ui.py   # GUI 支撑测试
+├─ README.md                        # 使用说明
+├─ 功能总和文档.md                  # 功能记录
+└─ 问题总和文档.md                  # 问题记录
+```
 
-## 环境要求
+## 重要说明
 
-### 1. Python
+exe **不包含 BBDown**。
 
-需要安装 Python。
+目标电脑仍然需要：
 
-检查命令：
+- 已安装 BBDown，并且能通过 `bbdown` 命令调用；或
+- 在 GUI 中手动选择 `bbdown.exe`。
+
+## 直接运行 exe
+
+双击运行：
+
+```text
+D:\bbdown脚本\release\BilibiliDownloaderUI.exe
+```
+
+如果 GUI 没有自动检测到 BBDown：
+
+1. 点击 `自动检测`。
+2. 如果仍未检测到，点击 `选择 bbdown`。
+3. 手动选择 `bbdown.exe`。
+
+## GUI 功能
+
+- 收藏夹批量下载。
+- 单个视频链接 / BV 号下载。
+- 音频 / 视频二选一。
+- 选择下载目录。
+- 自动检测或手动选择 BBDown。
+- 开始下载。
+- 停止下载。
+- 日志窗口实时显示 BBDown 输出。
+- 下载完成后显示统计信息。
+
+## 停止下载
+
+如果发现下载错了视频，可以点击：
+
+```text
+停止下载
+```
+
+停止后：
+
+- 当前正在运行的 BBDown 进程会被终止。
+- 收藏夹批量下载不会继续下载下一个视频。
+- 日志会显示停止信息。
+- 状态变为 `已停止`。
+- `开始下载` 按钮恢复可点击。
+
+## GUI 下载收藏夹音频
+
+1. 选择 `收藏夹链接`。
+2. 输入收藏夹链接。
+3. 选择 `音频`。
+4. 选择下载目录，例如：
+
+```text
+G:\默认收藏夹\音频
+```
+
+5. 点击 `自动检测` 或手动选择 `bbdown.exe`。
+6. 点击 `开始下载`。
+
+## GUI 下载单个视频音频
+
+1. 选择 `单个视频链接 / BV号`。
+2. 输入视频链接或 BV 号，例如：
+
+```text
+https://www.bilibili.com/video/BV1tkdVB4EpP/
+```
+
+或者：
+
+```text
+BV1tkdVB4EpP
+```
+
+3. 选择 `音频` 或 `视频`。
+4. 选择下载目录。
+5. 点击 `开始下载`。
+
+## 从源码运行 GUI
 
 ```bash
-python --version
+python "D:\bbdown脚本\bilibili_downloader_ui.py"
 ```
 
-如果系统中 Python 命令是 `python3`，后续命令可把 `python` 替换为 `python3`。
+## 重新打包 exe
 
-### 2. BBDown
-
-需要本机已安装 `BBDown`，并且命令行可以直接调用 `bbdown`。
-
-检查命令：
+执行：
 
 ```bash
-bbdown --help
+python "D:\bbdown脚本\build_exe.py"
 ```
 
-如果提示找不到命令，需要先安装 BBDown，并确保它已加入系统 PATH。
+生成：
 
-### 3. 登录说明
-
-如果收藏夹需要登录权限，或者下载会员/受限内容，先执行：
-
-```bash
-bbdown login
+```text
+D:\bbdown脚本\dist\BilibiliDownloaderUI.exe
 ```
 
-按 BBDown 提示扫码登录即可。
+发布版位置：
 
-## 使用方式
-
-下载来源二选一：
-
-| 来源 | 参数 | 说明 |
-| --- | --- | --- |
-| 收藏夹 | `--fav-url` | 批量下载收藏夹内全部视频 |
-| 单个视频 | `--video-url` | 下载一个视频链接或 BV 号 |
-
-`--fav-url` 和 `--video-url` 不能同时使用，也不能都不传。
-
-通用参数：
-
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| `--mode` | 是 | 下载模式，只能是 `audio` 或 `video` |
-| `--output-dir` | 是 | 下载目录 |
-
-## 收藏夹批量下载
-
-### Windows CMD 下载音频
-
-```bat
-python "D:\bbdown脚本\download_bilibili_fav.py" --fav-url "https://space.bilibili.com/619278616/favlist?fid=3928433616&ftype=create" --mode audio --output-dir "G:\默认收藏夹\音频"
+```text
+D:\bbdown脚本\release\BilibiliDownloaderUI.exe
 ```
-
-### Windows CMD 下载视频
-
-```bat
-python "D:\bbdown脚本\download_bilibili_fav.py" --fav-url "https://space.bilibili.com/619278616/favlist?fid=3928433616&ftype=create" --mode video --output-dir "G:\默认收藏夹\视频"
-```
-
-### Linux/macOS 下载音频
-
-```bash
-python download_bilibili_fav.py \
-  --fav-url "https://space.bilibili.com/619278616/favlist?fid=3928433616&ftype=create" \
-  --mode audio \
-  --output-dir "/home/user/bilibili-audio"
-```
-
-## 单个视频下载
-
-### Windows CMD 下载单个视频的音频
-
-```bat
-python "D:\bbdown脚本\download_bilibili_fav.py" --video-url "https://www.bilibili.com/video/BV1tkdVB4EpP/?spm_id_from=333.1007.tianma.1-1-1.click&vd_source=9e9edf796dae1e9ced58ec1bdbd37c73" --mode audio --output-dir "G:\默认收藏夹\音频"
-```
-
-### Windows CMD 下载单个完整视频
-
-```bat
-python "D:\bbdown脚本\download_bilibili_fav.py" --video-url "https://www.bilibili.com/video/BV1tkdVB4EpP/?spm_id_from=333.1007.tianma.1-1-1.click&vd_source=9e9edf796dae1e9ced58ec1bdbd37c73" --mode video --output-dir "G:\默认收藏夹\视频"
-```
-
-### 直接使用 BV 号
-
-```bat
-python "D:\bbdown脚本\download_bilibili_fav.py" --video-url "BV1tkdVB4EpP" --mode audio --output-dir "G:\默认收藏夹\音频"
-```
-
-### Linux/macOS 下载单个视频音频
-
-```bash
-python download_bilibili_fav.py \
-  --video-url "https://www.bilibili.com/video/BV1tkdVB4EpP/" \
-  --mode audio \
-  --output-dir "/home/user/bilibili-audio"
-```
-
-## 音频和视频模式区别
-
-### 音频模式
-
-```bash
---mode audio
-```
-
-脚本会调用：
-
-```bash
-bbdown BV号 --audio-only --work-dir 下载目录
-```
-
-适合保存音频内容。
-
-### 视频模式
-
-```bash
---mode video
-```
-
-脚本会调用：
-
-```bash
-bbdown BV号 --work-dir 下载目录
-```
-
-适合保存完整视频。
-
-## Windows CMD 多行写法说明
-
-CMD 使用 `^` 作为换行符，例如：
-
-```bat
-python "D:\bbdown脚本\download_bilibili_fav.py" ^
-  --video-url "BV1tkdVB4EpP" ^
-  --mode audio ^
-  --output-dir "G:\默认收藏夹\音频"
-```
-
-注意：
-
-- `^` 必须放在每一行最后。
-- `^` 后面不要有空格。
-- 最后一行不要加 `^`。
-- 出现 `More?` 是 CMD 等待继续输入，不是脚本报错。
 
 ## 运行测试
 
-测试文件：
-
-```text
-test_download_bilibili_fav.py
-```
-
-运行：
-
 ```bash
-python test_download_bilibili_fav.py
+python "D:\bbdown脚本\test_download_bilibili_fav.py"
+python "D:\bbdown脚本\test_bilibili_downloader_ui.py"
 ```
-
-当前测试覆盖：
-
-- 收藏夹链接 `fid` 解析。
-- 缺少 `fid` 时抛出错误。
-- 单个视频链接 BV 号解析。
-- 直接传入 BV 号解析。
-- 收藏夹下载和单个视频下载参数互斥。
-- 音频模式 BBDown 命令构造。
-- 视频模式 BBDown 命令构造。
-- 收藏夹接口失败时提示未登录、私有或不存在。
-- 批量下载时单个视频失败后跳过。
-- 单个视频下载时使用解析出的 BV 号调用 BBDown。
 
 ## 常见问题
 
-### 1. 获取收藏夹失败
+### 1. exe 打开后找不到 BBDown
+
+原因：exe 不包含 BBDown。
+
+处理方式：
+
+- 点击 `自动检测`。
+- 如果仍未检测到，点击 `选择 bbdown`，手动选择 `bbdown.exe`。
+- 或者把 BBDown 加入系统 PATH。
+
+### 2. 获取收藏夹失败
 
 可能原因：
 
@@ -219,18 +169,13 @@ python test_download_bilibili_fav.py
 
 处理方式：
 
-1. 检查收藏夹链接是否正确。
-2. 如果需要登录，先执行：
-
 ```bash
 bbdown login
 ```
 
-3. 如果收藏夹是私有的，请先在哔哩哔哩中公开收藏夹。
+如果收藏夹是私有的，请先在哔哩哔哩中公开收藏夹。
 
-### 2. 下载目录里没有文件
-
-先确认命令中的 `--output-dir` 是否写对。
+### 3. 下载目录里没有文件
 
 Windows 上建议使用原生路径：
 
@@ -238,73 +183,20 @@ Windows 上建议使用原生路径：
 G:\默认收藏夹\音频
 ```
 
-不要把 Windows 盘符目录写成：
+不要写成：
 
 ```text
 /g/默认收藏夹/音频
 ```
 
-因为 BBDown 是 .NET 程序，在 Windows 环境下可能把 `/g/...` 识别成错误目录。
+### 4. 下载时弹出 CMD 窗口
 
-### 3. 某些视频下载失败
+新版 GUI 已隐藏 BBDown 子进程窗口。如果仍然弹窗，请确认你运行的是：
 
-脚本会自动跳过失败视频，并在最后输出失败列表。
-
-常见原因：
-
-- 视频已删除。
-- 视频失效。
-- 视频需要登录权限。
-- 视频有区域限制。
-- 当前账号无权限下载。
-
-### 4. 中文路径乱码
-
-Windows 终端可能显示乱码，但只要路径和文件实际存在，一般不影响下载。
-
-如果显示异常，可以尝试使用 Windows Terminal，或在 PowerShell 中执行：
-
-```powershell
-chcp 65001
+```text
+D:\bbdown脚本\release\BilibiliDownloaderUI.exe
 ```
 
-### 5. 找不到 bbdown 命令
+### 5. GUI 日志中文乱码
 
-如果出现类似 `bbdown: command not found`，说明 BBDown 没有加入 PATH。
-
-处理方式：
-
-- 确认 BBDown 已安装。
-- 确认命令行能执行：
-
-```bash
-bbdown --help
-```
-
-## 文件说明
-
-| 文件 | 说明 |
-| --- | --- |
-| `download_bilibili_fav.py` | Python 跨平台下载脚本 |
-| `test_download_bilibili_fav.py` | Python 单元测试 |
-| `README.md` | 使用说明文档 |
-| `功能总和文档.md` | 功能实现记录 |
-| `问题总和文档.md` | 问题和修复记录 |
-
-## 推荐使用流程
-
-1. 确认 BBDown 可用：
-
-```bash
-bbdown --help
-```
-
-2. 如有权限问题，先登录：
-
-```bash
-bbdown login
-```
-
-3. 执行 Python 脚本下载收藏夹或单个视频。
-
-4. 查看下载统计和失败列表。
+GUI 已按系统首选编码读取 BBDown 输出，并在日志中显示当前编码。

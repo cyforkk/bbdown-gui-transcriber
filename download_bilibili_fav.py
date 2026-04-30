@@ -29,6 +29,7 @@ class DownloadResult:
     total: int
     successes: List[FavoriteVideo]
     failures: List[DownloadFailure]
+    cancelled: bool = False
 
 
 def parse_media_id(fav_url: str) -> str:
@@ -105,10 +106,11 @@ def fetch_favorite_videos(media_id: str, referer: str) -> List[FavoriteVideo]:
         page_number += 1
 
 
-def build_bbdown_command(bvid: str, mode: str, output_dir: str) -> List[str]:
+def build_bbdown_command(bvid: str, mode: str, output_dir: str, bbdown_path: str = 'bbdown') -> List[str]:
+    executable = bbdown_path.strip() if bbdown_path and bbdown_path.strip() else 'bbdown'
     if mode == 'audio':
-        return ['bbdown', bvid, '--audio-only', '--work-dir', output_dir]
-    return ['bbdown', bvid, '--work-dir', output_dir]
+        return [executable, bvid, '--audio-only', '--work-dir', output_dir]
+    return [executable, bvid, '--work-dir', output_dir]
 
 
 def run_command(command: List[str]) -> int:
@@ -116,26 +118,48 @@ def run_command(command: List[str]) -> int:
     return completed.returncode
 
 
+def never_stop() -> bool:
+    return False
+
+
 def download_all(
     videos: Iterable[FavoriteVideo],
     mode: str,
     output_dir: str,
+    bbdown_path: str = 'bbdown',
     runner: Callable[[List[str]], int] = run_command,
+    should_stop: Callable[[], bool] = never_stop,
 ) -> DownloadResult:
     video_list = list(videos)
     successes = []
     failures = []
+    cancelled = False
 
     for index, video in enumerate(video_list, start=1):
+        if should_stop():
+            cancelled = True
+            print('下载已停止，不再继续下载后续视频。')
+            break
+
         print('[{0}/{1}] 开始下载：{2} {3}'.format(index, len(video_list), video.bvid, video.title))
-        command = build_bbdown_command(video.bvid, mode, output_dir)
+        command = build_bbdown_command(video.bvid, mode, output_dir, bbdown_path)
 
         try:
             exit_code = runner(command)
         except Exception as exc:
+            if should_stop():
+                cancelled = True
+                print('下载已停止：{0}'.format(video.bvid))
+                break
             failures.append(DownloadFailure(video.bvid, video.title, str(exc)))
             print('下载异常，已跳过：{0}，原因：{1}'.format(video.bvid, exc), file=sys.stderr)
             continue
+
+        if should_stop():
+            cancelled = True
+            if exit_code != 0:
+                print('下载已停止：{0}'.format(video.bvid))
+                break
 
         if exit_code == 0:
             successes.append(video)
@@ -145,18 +169,20 @@ def download_all(
         failures.append(DownloadFailure(video.bvid, video.title, 'BBDown exit code {0}'.format(exit_code)))
         print('下载失败，已跳过：{0}，退出码：{1}'.format(video.bvid, exit_code), file=sys.stderr)
 
-    return DownloadResult(total=len(video_list), successes=successes, failures=failures)
+    return DownloadResult(total=len(video_list), successes=successes, failures=failures, cancelled=cancelled)
 
 
 def download_single_video(
     video_url: str,
     mode: str,
     output_dir: str,
+    bbdown_path: str = 'bbdown',
     runner: Callable[[List[str]], int] = run_command,
+    should_stop: Callable[[], bool] = never_stop,
 ) -> DownloadResult:
     bvid = parse_video_id(video_url)
     video = FavoriteVideo(bvid=bvid, title='单个视频')
-    return download_all([video], mode, output_dir, runner)
+    return download_all([video], mode, output_dir, bbdown_path, runner, should_stop)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -166,6 +192,7 @@ def create_parser() -> argparse.ArgumentParser:
     source_group.add_argument('--video-url', help='单个哔哩哔哩视频链接或 BV 号。')
     parser.add_argument('--mode', required=True, choices=['audio', 'video'], help='下载模式：audio 只下载音频，video 下载视频。')
     parser.add_argument('--output-dir', required=True, help='下载目录，Windows 请直接传 G:\\xxx，Linux/macOS 请传 /path/to/dir。')
+    parser.add_argument('--bbdown-path', default='bbdown', help='BBDown 可执行文件路径，默认使用 PATH 中的 bbdown。')
     return parser
 
 
@@ -178,6 +205,8 @@ def print_result(result: DownloadResult) -> None:
     print('总数：{0}'.format(result.total))
     print('成功：{0}'.format(len(result.successes)))
     print('失败：{0}'.format(len(result.failures)))
+    if result.cancelled:
+        print('状态：已停止')
 
     if result.failures:
         print('失败列表：')
@@ -194,11 +223,12 @@ def main() -> int:
 
         print('下载模式: {0}'.format(args.mode))
         print('下载目录: {0}'.format(output_dir))
+        print('BBDown: {0}'.format(args.bbdown_path))
 
         if args.video_url:
             bvid = parse_video_id(args.video_url)
             print('单个视频 BV: {0}'.format(bvid))
-            result = download_single_video(args.video_url, args.mode, output_dir)
+            result = download_single_video(args.video_url, args.mode, output_dir, args.bbdown_path)
             print_result(result)
             return 0
 
@@ -212,7 +242,7 @@ def main() -> int:
             return 0
 
         print('获取完成，共 {0} 个视频。'.format(len(videos)))
-        result = download_all(videos, args.mode, output_dir)
+        result = download_all(videos, args.mode, output_dir, args.bbdown_path)
         print_result(result)
         return 0
     except Exception as exc:
