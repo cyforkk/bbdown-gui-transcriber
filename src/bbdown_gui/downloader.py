@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, List
+from typing import Callable, Iterable, List, Set
 
 
 @dataclass(frozen=True)
@@ -113,6 +113,31 @@ def build_bbdown_command(bvid: str, mode: str, output_dir: str, bbdown_path: str
     return [executable, bvid, '--work-dir', output_dir]
 
 
+DOWNLOAD_OUTPUT_EXTENSIONS = {
+    '.aac',
+    '.ass',
+    '.flac',
+    '.m4a',
+    '.m4s',
+    '.mkv',
+    '.mp3',
+    '.mp4',
+    '.srt',
+    '.wav',
+}
+
+
+def snapshot_download_outputs(output_dir: str) -> Set[Path]:
+    root = Path(output_dir)
+    if not root.exists():
+        return set()
+    return {path for path in root.rglob('*') if path.is_file() and path.suffix.lower() in DOWNLOAD_OUTPUT_EXTENSIONS}
+
+
+def find_new_download_outputs(output_dir: str, before: Set[Path]) -> List[Path]:
+    return sorted(snapshot_download_outputs(output_dir) - before, key=lambda path: str(path).lower())
+
+
 def run_command(command: List[str]) -> int:
     completed = subprocess.run(command)
     return completed.returncode
@@ -138,18 +163,19 @@ def download_all(
     for index, video in enumerate(video_list, start=1):
         if should_stop():
             cancelled = True
-            print('下载已停止，不再继续下载后续视频。')
+            print('用户已停止任务，不再继续下载后续视频。')
             break
 
         print('[{0}/{1}] 开始下载：{2} {3}'.format(index, len(video_list), video.bvid, video.title))
         command = build_bbdown_command(video.bvid, mode, output_dir, bbdown_path)
+        output_snapshot = snapshot_download_outputs(output_dir)
 
         try:
             exit_code = runner(command)
         except Exception as exc:
             if should_stop():
                 cancelled = True
-                print('下载已停止：{0}'.format(video.bvid))
+                print('任务已停止：{0}'.format(video.bvid))
                 break
             failures.append(DownloadFailure(video.bvid, video.title, str(exc)))
             print('下载异常，已跳过：{0}，原因：{1}'.format(video.bvid, exc), file=sys.stderr)
@@ -158,12 +184,18 @@ def download_all(
         if should_stop():
             cancelled = True
             if exit_code != 0:
-                print('下载已停止：{0}'.format(video.bvid))
+                print('任务已停止：{0}'.format(video.bvid))
                 break
 
         if exit_code == 0:
+            new_outputs = find_new_download_outputs(output_dir, output_snapshot)
+            if not new_outputs:
+                reason = 'BBDown 执行完成，但未检测到下载文件'
+                failures.append(DownloadFailure(video.bvid, video.title, reason))
+                print('下载失败：{0}，原因：{1}'.format(video.bvid, reason), file=sys.stderr)
+                continue
             successes.append(video)
-            print('下载成功：{0}'.format(video.bvid))
+            print('下载成功：{0}，文件：{1}'.format(video.bvid, new_outputs[0]))
             continue
 
         failures.append(DownloadFailure(video.bvid, video.title, 'BBDown exit code {0}'.format(exit_code)))

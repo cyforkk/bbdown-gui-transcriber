@@ -29,6 +29,13 @@ class BuildExeTests(unittest.TestCase):
             build_exe.DIST_DIR / build_exe.APP_NAME / (build_exe.APP_NAME + '.exe'),
         )
 
+    def test_required_build_paths_include_tkinter_runtime_data(self):
+        paths = build_exe.get_required_build_paths(build_exe.DIST_DIR / build_exe.APP_NAME)
+
+        self.assertIn(build_exe.DIST_DIR / build_exe.APP_NAME / 'BilibiliDownloaderUI.exe', paths)
+        self.assertIn(build_exe.DIST_DIR / build_exe.APP_NAME / '_internal' / '_tcl_data', paths)
+        self.assertIn(build_exe.DIST_DIR / build_exe.APP_NAME / '_internal' / '_tk_data', paths)
+
 
 if __name__ == '__main__':
     unittest.main()

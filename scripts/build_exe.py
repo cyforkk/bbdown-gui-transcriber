@@ -45,6 +45,18 @@ def get_build_exe_path() -> Path:
     return get_build_app_dir() / (APP_NAME + '.exe')
 
 
+def get_required_build_paths(app_dir: Path) -> list[Path]:
+    return [
+        app_dir / (APP_NAME + '.exe'),
+        app_dir / '_internal' / '_tcl_data',
+        app_dir / '_internal' / '_tk_data',
+    ]
+
+
+def find_missing_required_build_paths(app_dir: Path) -> list[Path]:
+    return [path for path in get_required_build_paths(app_dir) if not path.exists()]
+
+
 def main() -> int:
     if not ENTRY_FILE.exists():
         print('入口文件不存在：{0}'.format(ENTRY_FILE), file=sys.stderr)
@@ -60,8 +72,11 @@ def main() -> int:
 
     app_dir = get_build_app_dir()
     exe_path = get_build_exe_path()
-    if not exe_path.exists():
-        print('打包命令已完成，但未找到 exe：{0}'.format(exe_path), file=sys.stderr)
+    missing_paths = find_missing_required_build_paths(app_dir)
+    if missing_paths:
+        print('打包命令已完成，但发布目录缺少必要文件：', file=sys.stderr)
+        for missing_path in missing_paths:
+            print('- {0}'.format(missing_path), file=sys.stderr)
         return 1
 
     print('打包完成：{0}'.format(app_dir))

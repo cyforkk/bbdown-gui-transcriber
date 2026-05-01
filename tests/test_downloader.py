@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from bbdown_gui import downloader
@@ -79,16 +81,47 @@ class DownloadBilibiliFavTests(unittest.TestCase):
             downloader.FavoriteVideo(bvid='BV_fail', title='bad'),
         ]
 
-        def fake_runner(command):
-            return 1 if command[1] == 'BV_fail' else 0
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
 
-        result = downloader.download_all(videos, 'audio', r'G:\默认收藏夹\音频', runner=fake_runner)
+            def fake_runner(command):
+                if command[1] == 'BV_fail':
+                    return 1
+                (output_dir / 'success.m4a').write_bytes(b'audio')
+                return 0
+
+            result = downloader.download_all(videos, 'audio', tmp, runner=fake_runner)
 
         self.assertEqual(result.total, 2)
         self.assertEqual(len(result.successes), 1)
         self.assertEqual(len(result.failures), 1)
         self.assertEqual(result.failures[0].bvid, 'BV_fail')
         self.assertFalse(result.cancelled)
+
+    def test_download_all_reports_failure_when_no_output_file_created(self):
+        videos = [downloader.FavoriteVideo(bvid='BV_empty', title='empty')]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = downloader.download_all(videos, 'audio', tmp, runner=lambda command: 0)
+
+        self.assertEqual(len(result.successes), 0)
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn('未检测到下载文件', result.failures[0].reason)
+
+    def test_download_all_accepts_success_when_output_file_created(self):
+        videos = [downloader.FavoriteVideo(bvid='BV_success', title='ok')]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+
+            def fake_runner(command):
+                (output_dir / 'ok.m4a').write_bytes(b'audio')
+                return 0
+
+            result = downloader.download_all(videos, 'audio', tmp, runner=fake_runner)
+
+        self.assertEqual(len(result.successes), 1)
+        self.assertEqual(len(result.failures), 0)
 
     def test_download_all_stops_before_next_video_when_cancelled(self):
         videos = [
@@ -98,18 +131,22 @@ class DownloadBilibiliFavTests(unittest.TestCase):
         calls = []
         stop = {'value': False}
 
-        def fake_runner(command):
-            calls.append(command[1])
-            stop['value'] = True
-            return 0
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
 
-        result = downloader.download_all(
-            videos,
-            'audio',
-            r'G:\默认收藏夹\音频',
-            runner=fake_runner,
-            should_stop=lambda: stop['value'],
-        )
+            def fake_runner(command):
+                calls.append(command[1])
+                (output_dir / 'first.m4a').write_bytes(b'audio')
+                stop['value'] = True
+                return 0
+
+            result = downloader.download_all(
+                videos,
+                'audio',
+                tmp,
+                runner=fake_runner,
+                should_stop=lambda: stop['value'],
+            )
 
         self.assertEqual(calls, ['BV_first'])
         self.assertEqual(len(result.successes), 1)
@@ -118,37 +155,45 @@ class DownloadBilibiliFavTests(unittest.TestCase):
     def test_download_single_video_uses_parsed_video_id(self):
         commands = []
 
-        def fake_runner(command):
-            commands.append(command)
-            return 0
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
 
-        result = downloader.download_single_video(
-            'https://www.bilibili.com/video/BV1tkdVB4EpP/?spm_id_from=333.1007.tianma.1-1-1.click&vd_source=xxx',
-            'audio',
-            r'G:\默认收藏夹\音频',
-            runner=fake_runner,
-        )
+            def fake_runner(command):
+                commands.append(command)
+                (output_dir / 'single.m4a').write_bytes(b'audio')
+                return 0
+
+            result = downloader.download_single_video(
+                'https://www.bilibili.com/video/BV1tkdVB4EpP/?spm_id_from=333.1007.tianma.1-1-1.click&vd_source=xxx',
+                'audio',
+                tmp,
+                runner=fake_runner,
+            )
 
         self.assertEqual(result.total, 1)
         self.assertEqual(len(result.successes), 1)
-        self.assertEqual(commands[0], ['bbdown', 'BV1tkdVB4EpP', '--audio-only', '--work-dir', r'G:\默认收藏夹\音频'])
+        self.assertEqual(commands[0], ['bbdown', 'BV1tkdVB4EpP', '--audio-only', '--work-dir', tmp])
 
     def test_download_single_video_uses_custom_bbdown_path(self):
         commands = []
 
-        def fake_runner(command):
-            commands.append(command)
-            return 0
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
 
-        downloader.download_single_video(
-            'BV1tkdVB4EpP',
-            'video',
-            r'G:\默认收藏夹\视频',
-            bbdown_path=r'C:\tools\bbdown.exe',
-            runner=fake_runner,
-        )
+            def fake_runner(command):
+                commands.append(command)
+                (output_dir / 'custom.mp4').write_bytes(b'video')
+                return 0
 
-        self.assertEqual(commands[0], [r'C:\tools\bbdown.exe', 'BV1tkdVB4EpP', '--work-dir', r'G:\默认收藏夹\视频'])
+            downloader.download_single_video(
+                'BV1tkdVB4EpP',
+                'video',
+                tmp,
+                bbdown_path=r'C:	oolsbdown.exe',
+                runner=fake_runner,
+            )
+
+        self.assertEqual(commands[0], [r'C:	oolsbdown.exe', 'BV1tkdVB4EpP', '--work-dir', tmp])
 
 
 if __name__ == '__main__':
