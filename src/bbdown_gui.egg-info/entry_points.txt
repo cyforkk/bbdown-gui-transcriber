@@ -1,2 +1,0 @@
-[console_scripts]
-bbdown-gui = bbdown_gui.app:main
