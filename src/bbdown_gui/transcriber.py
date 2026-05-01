@@ -83,7 +83,11 @@ def find_cuda_dll_dirs(search_paths: Sequence[Path]) -> Optional[Tuple[Path, Pat
 
 
 def get_default_site_package_paths() -> List[Path]:
-    paths = [Path.cwd() / '.venv' / 'Lib' / 'site-packages']
+    paths = []
+    pyinstaller_temp_dir = getattr(sys, '_MEIPASS', None)
+    if pyinstaller_temp_dir:
+        paths.append(Path(pyinstaller_temp_dir))
+    paths.append(Path.cwd() / '.venv' / 'Lib' / 'site-packages')
     paths.extend(Path(path) for path in site.getsitepackages())
     return paths
 

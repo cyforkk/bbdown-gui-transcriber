@@ -47,6 +47,12 @@ class AudioTranscriberTests(unittest.TestCase):
 
         self.assertEqual(result, (cublas, cudnn))
 
+    def test_default_site_package_paths_include_pyinstaller_temp_dir(self):
+        with patch.object(transcriber.sys, '_MEIPASS', 'D:/temp/_MEI123', create=True):
+            paths = transcriber.get_default_site_package_paths()
+
+        self.assertIn(Path('D:/temp/_MEI123'), paths)
+
     def test_process_files_stops_before_next_file(self):
         calls = []
         stop = {'value': False}
