@@ -22,13 +22,32 @@ def get_application_dir() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+
+def is_bbdown_usable(executable: str) -> bool:
+    try:
+        completed = subprocess.run(
+            [executable, '--version'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding=get_subprocess_output_encoding(),
+            errors='replace',
+            timeout=10,
+            **get_hidden_subprocess_kwargs()
+        )
+    except Exception:
+        return False
+
+    return completed.returncode == 0
+
+
 def detect_bbdown_executable() -> str:
     local_bbdown = get_application_dir() / 'bbdown.exe'
-    if local_bbdown.exists():
+    if local_bbdown.exists() and is_bbdown_usable(str(local_bbdown)):
         return str(local_bbdown)
 
     detected = shutil.which('bbdown')
-    if detected:
+    if detected and is_bbdown_usable(detected):
         return detected
 
     return 'bbdown'

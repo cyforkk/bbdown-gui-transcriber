@@ -26,10 +26,12 @@ release\
 
 GUI 检测 BBDown 的顺序：
 
-1. exe 同目录的 `bbdown.exe`
-2. 源码运行时项目根目录的 `bbdown.exe`
-3. 系统 PATH 中的 `bbdown`
+1. exe 同目录的 `bbdown.exe`，并先执行 `--version` 校验可用性
+2. 源码运行时项目根目录的 `bbdown.exe`，并先执行 `--version` 校验可用性
+3. 系统 PATH 中的 `bbdown`，并先执行 `--version` 校验可用性
 4. 用户手动点击 `选择 bbdown`
+
+注意：`.NET global tool` 安装目录里的 `bbdown.exe` 不建议复制到 release 目录当便携版使用。如果复制后不可用，GUI 会自动跳过它并回退到 PATH 中的 BBDown。
 
 ## 当前目录结构
 

@@ -50,7 +50,7 @@ class BilibiliDownloaderUITests(unittest.TestCase):
         self.assertTrue(ui_module.BilibiliDownloaderUI.should_stop(instance))
 
     def test_detect_bbdown_executable_prefers_application_dir(self):
-        with patch.object(ui_module, 'get_application_dir') as app_dir, patch.object(ui_module.shutil, 'which', return_value='PATH_BBDOWN'):
+        with patch.object(ui_module, 'get_application_dir') as app_dir, patch.object(ui_module.shutil, 'which', return_value='PATH_BBDOWN'), patch.object(ui_module, 'is_bbdown_usable', return_value=True):
             local_dir = Mock()
             local_bbdown = Mock()
             local_bbdown.exists.return_value = True
@@ -61,7 +61,7 @@ class BilibiliDownloaderUITests(unittest.TestCase):
             self.assertEqual(ui_module.detect_bbdown_executable(), 'LOCAL_BBDOWN')
 
     def test_detect_bbdown_executable_uses_path_when_local_missing(self):
-        with patch.object(ui_module, 'get_application_dir') as app_dir, patch.object(ui_module.shutil, 'which', return_value='PATH_BBDOWN'):
+        with patch.object(ui_module, 'get_application_dir') as app_dir, patch.object(ui_module.shutil, 'which', return_value='PATH_BBDOWN'), patch.object(ui_module, 'is_bbdown_usable', return_value=True):
             local_dir = Mock()
             local_bbdown = Mock()
             local_bbdown.exists.return_value = False
@@ -69,6 +69,28 @@ class BilibiliDownloaderUITests(unittest.TestCase):
             app_dir.return_value = local_dir
 
             self.assertEqual(ui_module.detect_bbdown_executable(), 'PATH_BBDOWN')
+
+    def test_detect_bbdown_executable_skips_unusable_local_and_uses_path(self):
+        with patch.object(ui_module, 'get_application_dir') as app_dir, patch.object(ui_module.shutil, 'which', return_value='PATH_BBDOWN'), patch.object(ui_module, 'is_bbdown_usable') as usable:
+            local_dir = Mock()
+            local_bbdown = Mock()
+            local_bbdown.exists.return_value = True
+            local_bbdown.__str__ = Mock(return_value='LOCAL_BBDOWN')
+            local_dir.__truediv__ = Mock(return_value=local_bbdown)
+            app_dir.return_value = local_dir
+            usable.side_effect = lambda value: str(value) == 'PATH_BBDOWN'
+
+            self.assertEqual(ui_module.detect_bbdown_executable(), 'PATH_BBDOWN')
+
+    def test_detect_bbdown_executable_returns_bbdown_when_nothing_usable(self):
+        with patch.object(ui_module, 'get_application_dir') as app_dir, patch.object(ui_module.shutil, 'which', return_value=None), patch.object(ui_module, 'is_bbdown_usable', return_value=False):
+            local_dir = Mock()
+            local_bbdown = Mock()
+            local_bbdown.exists.return_value = False
+            local_dir.__truediv__ = Mock(return_value=local_bbdown)
+            app_dir.return_value = local_dir
+
+            self.assertEqual(ui_module.detect_bbdown_executable(), 'bbdown')
 
 
 if __name__ == '__main__':
