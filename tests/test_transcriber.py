@@ -90,6 +90,18 @@ class AudioTranscriberTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.error, '未识别到可写入的文字内容')
 
+    def test_probe_media_file_hides_ffprobe_window_on_windows(self):
+        with patch.object(transcriber.sys, 'platform', 'win32'), patch.object(transcriber.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = 'aac'
+
+            transcriber.probe_media_file(Path('ok.m4a'))
+
+        kwargs = run.call_args.kwargs
+        self.assertIn('startupinfo', kwargs)
+        self.assertTrue(kwargs['startupinfo'].dwFlags & transcriber.subprocess.STARTF_USESHOWWINDOW)
+        self.assertEqual(kwargs['startupinfo'].wShowWindow, transcriber.subprocess.SW_HIDE)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,6 +2,7 @@
 import os
 import site
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +10,16 @@ from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 
 SUPPORTED_MEDIA_EXTENSIONS = ('.m4a', '.mp3', '.wav', '.flac', '.aac', '.mp4')
+
+
+def get_hidden_subprocess_kwargs() -> dict:
+    if sys.platform != 'win32':
+        return {}
+
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {'startupinfo': startupinfo}
 
 
 @dataclass(frozen=True)
@@ -50,6 +61,7 @@ def probe_media_file(input_path: Path) -> Tuple[bool, Optional[str]]:
             text=True,
             encoding='utf-8',
             errors='replace',
+            **get_hidden_subprocess_kwargs()
         )
     except FileNotFoundError:
         return True, None

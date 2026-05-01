@@ -11,12 +11,8 @@ BUILD_DIR = PROJECT_DIR / 'build'
 APP_NAME = 'BilibiliDownloaderUI'
 
 
-def main() -> int:
-    if not ENTRY_FILE.exists():
-        print('入口文件不存在：{0}'.format(ENTRY_FILE), file=sys.stderr)
-        return 1
-
-    command = [
+def build_pyinstaller_command() -> list[str]:
+    return [
         sys.executable,
         '-m',
         'PyInstaller',
@@ -25,6 +21,8 @@ def main() -> int:
         '--clean',
         '--name',
         APP_NAME,
+        '--collect-data',
+        'faster_whisper',
         '--distpath',
         str(DIST_DIR),
         '--workpath',
@@ -33,6 +31,14 @@ def main() -> int:
         str(PROJECT_DIR),
         str(ENTRY_FILE),
     ]
+
+
+def main() -> int:
+    if not ENTRY_FILE.exists():
+        print('入口文件不存在：{0}'.format(ENTRY_FILE), file=sys.stderr)
+        return 1
+
+    command = build_pyinstaller_command()
 
     print('执行打包命令：')
     print(' '.join(command))
