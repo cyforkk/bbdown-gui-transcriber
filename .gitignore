@@ -16,3 +16,4 @@ dist/
 *.egg-info/
 src/*.egg-info/
 release/
+.claude/
