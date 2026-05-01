@@ -314,13 +314,13 @@ class BilibiliDownloaderUI:
                 self.log('没有找到支持的音频/视频文件。\n')
                 return
 
-            transcriber = transcriber.AudioTranscriber(
+            audio_model = transcriber.AudioTranscriber(
                 model_size=self.model_size.get().strip() or 'medium',
                 device=self.device.get().strip() or 'cuda',
                 compute_type=self.compute_type.get().strip() or 'int8_float16',
                 log=self.log,
             )
-            result = transcriber.process_media_files(files, transcriber, should_stop=self.should_stop)
+            result = transcriber.process_media_files(files, audio_model, should_stop=self.should_stop)
             self.log_transcription_result(result)
         except Exception as exc:
             self.log('转文字任务失败：{0}\n'.format(exc))

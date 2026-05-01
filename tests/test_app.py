@@ -92,6 +92,30 @@ class BilibiliDownloaderUITests(unittest.TestCase):
 
             self.assertEqual(ui_module.detect_bbdown_executable(), 'bbdown')
 
+    def test_run_transcription_uses_transcriber_module_without_shadowing(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.model_size = Mock()
+        instance.model_size.get.return_value = 'medium'
+        instance.device = Mock()
+        instance.device.get.return_value = 'cuda'
+        instance.compute_type = Mock()
+        instance.compute_type.get.return_value = 'int8_float16'
+        instance.stop_requested = False
+        instance.output_queue = Mock()
+        instance.log = Mock()
+        instance.log_transcription_result = Mock()
+        instance.should_stop = Mock(return_value=False)
+
+        fake_path = Mock()
+        fake_path.is_dir.return_value = True
+        fake_transcriber = Mock()
+        fake_result = Mock()
+
+        with patch.object(ui_module, 'Path', return_value=fake_path), patch.object(ui_module.transcriber, 'find_media_files', return_value=['a.m4a']), patch.object(ui_module.transcriber, 'AudioTranscriber', return_value=fake_transcriber), patch.object(ui_module.transcriber, 'process_media_files', return_value=fake_result):
+            ui_module.BilibiliDownloaderUI.run_transcription(instance, 'G:/提取')
+
+        instance.log_transcription_result.assert_called_once_with(fake_result)
+
 
 if __name__ == '__main__':
     unittest.main()
