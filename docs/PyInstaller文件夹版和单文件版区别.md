@@ -260,3 +260,17 @@ release\
 如果项目包含 CUDA、Faster-Whisper、onnxruntime 这类大型依赖，文件夹版更合适。
 
 BBDown GUI 当前选择文件夹版发布，是为了换取更快的启动速度和更稳定的依赖加载体验。
+
+
+## GitHub 仓库中的发布方式
+
+虽然本项目使用文件夹版发布，但 `release/` 成品不提交到源码仓库。
+
+推荐流程是：
+
+1. 本地运行打包命令生成 `dist/BilibiliDownloaderUI/`。
+2. 将整个 `BilibiliDownloaderUI` 文件夹压缩为 `BilibiliDownloaderUI-windows-x64.zip`。
+3. 在 GitHub Releases 中上传 zip。
+4. 源码仓库只保留代码、文档、测试和打包脚本。
+
+这样既能保留文件夹版启动快的优点，又不会让 git 仓库因为大体积二进制文件变得难以 clone 和 push。

@@ -9,20 +9,53 @@
 
 ## 推荐使用
 
-普通用户运行：
+### 普通用户
+
+普通用户不需要 clone 源码仓库，建议到 GitHub Releases 下载发布包：
 
 ```text
-release\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
+BilibiliDownloaderUI-windows-x64.zip
 ```
 
-如果不想安装或配置 BBDown，可以把 `bbdown.exe` 放到同一个目录：
+解压后双击：
 
 ```text
-release\
+BilibiliDownloaderUI\BilibiliDownloaderUI.exe
+```
+
+注意：当前发布版是文件夹版，请保持整个 `BilibiliDownloaderUI` 文件夹完整，不要只复制 exe。
+
+如果不想安装或配置 BBDown，可以把可独立运行的 `bbdown.exe` 放到 `BilibiliDownloaderUI.exe` 同目录：
+
+```text
+BilibiliDownloaderUI\
 ├─ BilibiliDownloaderUI.exe
 ├─ bbdown.exe                  # 可选，放这里会被自动识别
-└─ README.txt
+└─ _internal\
 ```
+
+### 开发者
+
+源码仓库不提交 `release/` 发布成品。clone 仓库后请使用 uv 运行源码：
+
+```bat
+uv sync
+uv run bbdown-gui
+```
+
+如需自己打包 Windows 发布包：
+
+```bat
+uv run python scripts\build_exe.py
+```
+
+生成目录：
+
+```text
+dist\BilibiliDownloaderUI\
+```
+
+需要发布给普通用户时，请将 `dist\BilibiliDownloaderUI\` 压缩为 zip 后上传到 GitHub Releases，不要提交到 git 仓库。
 
 GUI 检测 BBDown 的顺序：
 
@@ -31,7 +64,7 @@ GUI 检测 BBDown 的顺序：
 3. 系统 PATH 中的 `bbdown`，并先执行 `--version` 校验可用性
 4. 用户手动点击 `选择 bbdown`
 
-注意：`.NET global tool` 安装目录里的 `bbdown.exe` 不建议复制到 release 目录当便携版使用。如果复制后不可用，GUI 会自动跳过它并回退到 PATH 中的 BBDown。
+注意：`.NET global tool` 安装目录里的 `bbdown.exe` 不建议复制到发布目录当便携版使用。如果复制后不可用，GUI 会自动跳过它并回退到 PATH 中的 BBDown。
 
 ## 当前目录结构
 
@@ -154,7 +187,7 @@ release\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 
 如果要放 `bbdown.exe`，请放在这个 exe 同目录。
 
-## 打包 exe
+## 打包发布包
 
 ```bat
 uv run python scripts\build_exe.py
@@ -166,13 +199,7 @@ uv run python scripts\build_exe.py
 dist\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 ```
 
-发布版复制到：
-
-```text
-release\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
-```
-
-当前使用文件夹版发布，避免单文件 exe 每次启动都解压 CUDA/Faster-Whisper 大依赖；发布目录不包含 BBDown 本体。
+当前使用文件夹版发布，避免单文件 exe 每次启动都解压 CUDA/Faster-Whisper 大依赖。发布成品请压缩为 zip 后上传到 GitHub Releases，不要提交进 git 仓库；发布包不包含 BBDown 本体。
 
 ## 常见问题
 
