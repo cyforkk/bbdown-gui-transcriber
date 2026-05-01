@@ -1,14 +1,7 @@
-import importlib.util
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
-MODULE_PATH = Path(__file__).with_name('download_bilibili_fav.py')
-spec = importlib.util.spec_from_file_location('download_bilibili_fav', MODULE_PATH)
-downloader = importlib.util.module_from_spec(spec)
-sys.modules['download_bilibili_fav'] = downloader
-spec.loader.exec_module(downloader)
+from bbdown_gui import downloader
 
 
 class DownloadBilibiliFavTests(unittest.TestCase):

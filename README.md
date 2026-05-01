@@ -1,158 +1,173 @@
-# BBDown 哔哩哔哩下载工具
+# BBDown GUI 下载与转文字工具
 
-这是一个基于 `uv` 管理的 Python/Tkinter 工具，支持：
+这是一个基于 `uv` 管理的 Python/Tkinter 桌面工具，集成：
 
-- GUI 图形界面
-- BBDown 下载收藏夹或单个视频
+- BBDown 收藏夹/单视频下载 GUI
 - Faster-Whisper 音频/视频转文字
+- Windows 单文件 exe 打包
+- 同目录 `bbdown.exe` 自动检测
 
-## 推荐运行方式
+## 推荐使用
 
-源码验证阶段推荐使用 uv 运行 GUI：
-
-```bat
-uv run python "D:\bbdown脚本\bilibili_downloader_ui.py"
-```
-
-当前 release exe 仍是上一版下载器。转文字功能先在源码 GUI 中验证，确认稳定后再处理 exe 打包。
-
-## 环境说明
-
-项目使用 uv 管理环境：
+普通用户运行：
 
 ```text
-pyproject.toml
-uv.lock
-.python-version
-.venv\
+release\BilibiliDownloaderUI.exe
 ```
 
-首次同步：
+如果不想安装或配置 BBDown，可以把 `bbdown.exe` 放到同一个目录：
+
+```text
+release\
+├─ BilibiliDownloaderUI.exe
+├─ bbdown.exe                  # 可选，放这里会被自动识别
+└─ README.txt
+```
+
+GUI 检测 BBDown 的顺序：
+
+1. exe 同目录的 `bbdown.exe`
+2. 源码运行时项目根目录的 `bbdown.exe`
+3. 系统 PATH 中的 `bbdown`
+4. 用户手动点击 `选择 bbdown`
+
+## 当前目录结构
+
+```text
+D:\bbdown脚本\
+├─ src\
+│  └─ bbdown_gui\
+│     ├─ __init__.py
+│     ├─ app.py                # Tkinter GUI
+│     ├─ downloader.py         # BBDown 下载逻辑
+│     └─ transcriber.py        # Faster-Whisper 转文字逻辑
+├─ tests\
+│  ├─ test_app.py
+│  ├─ test_downloader.py
+│  └─ test_transcriber.py
+├─ scripts\
+│  └─ build_exe.py
+├─ docs\
+│  ├─ 功能总和文档.md
+│  └─ 问题总和文档.md
+├─ release\
+│  ├─ BilibiliDownloaderUI.exe
+│  └─ README.txt
+├─ README.md
+├─ pyproject.toml
+├─ uv.lock
+├─ .python-version
+└─ .gitignore
+```
+
+## 环境准备
+
+首次拉取项目后执行：
 
 ```bat
 uv sync
 ```
 
-依赖包括：
+源码运行 GUI：
 
-- `faster-whisper`
-- `nvidia-cublas-cu12`
-- `nvidia-cudnn-cu12`
-- `pyinstaller`（开发依赖）
+```bat
+uv run python -m bbdown_gui.app
+```
 
-## GUI 功能
+或：
+
+```bat
+uv run bbdown-gui
+```
+
+## 功能说明
 
 ### 下载功能
 
-- 收藏夹批量下载。
-- 单个视频链接 / BV 号下载。
-- 音频 / 视频二选一。
-- 选择下载目录。
-- 自动检测或手动选择 BBDown。
-- 停止下载。
-- 隐藏 BBDown 子进程 CMD 窗口。
+- 收藏夹批量下载
+- 单个视频链接 / BV 号下载
+- 音频 / 视频二选一
+- 选择下载目录
+- 自动检测或手动选择 BBDown
+- 停止下载
+- 隐藏 BBDown 子进程 CMD 窗口
 
 ### 转文字功能
 
-- 选择单个音频/视频文件转文字。
-- 选择文件夹批量转文字。
-- 支持格式：`.m4a`、`.mp3`、`.wav`、`.flac`、`.aac`、`.mp4`。
-- 视频转文字支持 `.mp4`，本质是识别视频文件里的音频流，不是识别画面文字或 OCR。
-- 默认模型：`medium`。
-- 默认设备：`cuda`。
-- 默认计算类型：`int8_float16`。
-- 输出同名 `.txt` 文件。
-- 支持停止任务。
+- 单个音频/视频文件转文字
+- 文件夹批量转文字
+- 支持 `.m4a`、`.mp3`、`.wav`、`.flac`、`.aac`、`.mp4`
+- `.mp4` 视频转文字识别的是视频里的音频流，不是画面 OCR
+- 默认模型：`medium`
+- 默认设备：`cuda`
+- 默认计算类型：`int8_float16`
+- 输出同名 `.txt`
+- 支持停止任务
+
+## 批量转文字说明
+
+选择文件夹批量转文字时，Faster-Whisper 模型只加载一次，后续文件复用同一个模型实例。
+
+```text
+加载模型 1 次
+处理文件 1
+处理文件 2
+处理文件 3
+...
+```
+
+如果某个文件损坏或没有识别到文字，不会中断整个批量任务，会在最终统计里列出失败原因。
 
 ## 视频转文字说明
 
-当前支持 `.mp4` 视频转文字，但识别对象是视频中的声音：
+视频转文字流程：
 
 ```text
 视频文件 -> 读取音频流 -> Faster-Whisper 语音识别 -> 输出 txt
 ```
 
-不支持的场景：
+不支持：
 
-- 不会识别画面中的文字。
-- 不会对视频画面做 OCR。
-- 如果视频没有音频流，会提示：
-  ```text
-  媒体文件中没有可识别的音频流
-  ```
-- 如果视频文件损坏，会提示：
-  ```text
-  媒体文件无效
-  ```
-
-批量选择文件夹时，`.mp4` 会和 `.m4a`、`.mp3` 等音频文件一起被扫描并处理。
-
-## 使用步骤
-
-### 下载收藏夹音频
-
-1. 运行 GUI。
-2. 在 `下载功能` 中选择 `收藏夹链接`。
-3. 输入收藏夹链接。
-4. 选择 `音频`。
-5. 选择下载目录。
-6. 点击 `开始下载`。
-
-### 单个视频下载
-
-1. 在 `下载功能` 中选择 `单个视频链接 / BV号`。
-2. 输入视频链接或 BV 号。
-3. 选择 `音频` 或 `视频`。
-4. 点击 `开始下载`。
-
-### 音频文件转文字
-
-1. 在 `转文字功能` 中点击 `选择文件`。
-2. 选择 `.m4a`、`.mp3`、`.wav`、`.flac` 或 `.aac` 文件。
-3. 保持默认模型参数，或按需修改。
-4. 点击 `开始转文字`。
-5. 结果会输出到同目录同名 `.txt` 文件。
-
-### 视频文件转文字
-
-1. 在 `转文字功能` 中点击 `选择文件`。
-2. 选择包含音频流的 `.mp4` 文件。
-3. 点击 `开始转文字`。
-4. 结果会输出到同目录同名 `.txt` 文件。
-
-说明：这里识别的是视频里的声音，不是画面字幕。
-
-### 文件夹批量转文字
-
-1. 在 `转文字功能` 中点击 `选择文件夹`。
-2. 选择包含音频/视频文件的目录。
-3. 点击 `开始转文字`。
-4. 每个支持的文件会生成同名 `.txt`。
-
-批量转换时模型只加载一次，后续文件会复用同一个 Faster-Whisper 模型实例，不会每个文件都重新加载模型。
+- 识别画面文字
+- OCR
+- 无音频流视频
 
 ## 运行测试
 
 ```bat
-uv run python "D:\bbdown脚本\test_download_bilibili_fav.py"
-uv run python "D:\bbdown脚本\test_bilibili_downloader_ui.py"
-uv run python "D:\bbdown脚本\test_audio_transcriber.py"
+uv run python -m unittest discover -s tests
 ```
 
-## 重新打包 exe
-
-当前不建议立即打包包含 Faster-Whisper 的 exe，因为 CUDA、模型缓存和依赖体积需要单独验证。
-
-下载器旧版打包命令仍保留：
+## 打包 exe
 
 ```bat
-uv run python "D:\bbdown脚本\build_exe.py"
+uv run python scripts\build_exe.py
 ```
 
-## 重要说明
+生成：
 
-- exe 不包含 BBDown。
-- 转文字依赖 CUDA 版本的 faster-whisper 环境。
-- 如果转文字启动时加载模型较慢，属于正常现象。
-- 首次使用模型可能需要下载模型缓存。
-- 视频转文字只识别音频流，不识别画面内容。
+```text
+dist\BilibiliDownloaderUI.exe
+```
+
+发布版复制到：
+
+```text
+release\BilibiliDownloaderUI.exe
+```
+
+当前包含 Faster-Whisper 依赖后的 exe 约 91.58 MB。exe 不包含 BBDown 本体。
+
+## 常见问题
+
+### 找不到 BBDown
+
+把 `bbdown.exe` 放到 `BilibiliDownloaderUI.exe` 同目录，或在 GUI 中点击 `选择 bbdown`。
+
+### 首次转文字很慢
+
+Faster-Whisper 首次加载模型或下载模型缓存可能较慢，属于正常现象。
+
+### 视频转文字没有结果
+
+确认视频有音频流。当前不会识别画面字幕或画面文字。

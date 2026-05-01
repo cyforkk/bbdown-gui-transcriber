@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+src/bbdown_gui/__init__.py
+src/bbdown_gui/app.py
+src/bbdown_gui/downloader.py
+src/bbdown_gui/transcriber.py
+src/bbdown_gui.egg-info/PKG-INFO
+src/bbdown_gui.egg-info/SOURCES.txt
+src/bbdown_gui.egg-info/dependency_links.txt
+src/bbdown_gui.egg-info/entry_points.txt
+src/bbdown_gui.egg-info/requires.txt
+src/bbdown_gui.egg-info/top_level.txt
+tests/test_app.py
+tests/test_downloader.py
+tests/test_transcriber.py

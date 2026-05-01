@@ -1,16 +1,9 @@
-import importlib.util
 import locale
 import subprocess
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import Mock, patch
 
-MODULE_PATH = Path(__file__).with_name('bilibili_downloader_ui.py')
-spec = importlib.util.spec_from_file_location('bilibili_downloader_ui', MODULE_PATH)
-ui_module = importlib.util.module_from_spec(spec)
-sys.modules['bilibili_downloader_ui'] = ui_module
-spec.loader.exec_module(ui_module)
+from bbdown_gui import app as ui_module
 
 
 class BilibiliDownloaderUITests(unittest.TestCase):
@@ -55,6 +48,27 @@ class BilibiliDownloaderUITests(unittest.TestCase):
         instance.stop_requested = True
 
         self.assertTrue(ui_module.BilibiliDownloaderUI.should_stop(instance))
+
+    def test_detect_bbdown_executable_prefers_application_dir(self):
+        with patch.object(ui_module, 'get_application_dir') as app_dir, patch.object(ui_module.shutil, 'which', return_value='PATH_BBDOWN'):
+            local_dir = Mock()
+            local_bbdown = Mock()
+            local_bbdown.exists.return_value = True
+            local_bbdown.__str__ = Mock(return_value='LOCAL_BBDOWN')
+            local_dir.__truediv__ = Mock(return_value=local_bbdown)
+            app_dir.return_value = local_dir
+
+            self.assertEqual(ui_module.detect_bbdown_executable(), 'LOCAL_BBDOWN')
+
+    def test_detect_bbdown_executable_uses_path_when_local_missing(self):
+        with patch.object(ui_module, 'get_application_dir') as app_dir, patch.object(ui_module.shutil, 'which', return_value='PATH_BBDOWN'):
+            local_dir = Mock()
+            local_bbdown = Mock()
+            local_bbdown.exists.return_value = False
+            local_dir.__truediv__ = Mock(return_value=local_bbdown)
+            app_dir.return_value = local_dir
+
+            self.assertEqual(ui_module.detect_bbdown_executable(), 'PATH_BBDOWN')
 
 
 if __name__ == '__main__':

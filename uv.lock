@@ -59,7 +59,7 @@ wheels = [
 [[package]]
 name = "bbdown-gui"
 version = "0.2.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "faster-whisper" },
     { name = "nvidia-cublas-cu12" },

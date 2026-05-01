@@ -1,15 +1,9 @@
-import importlib.util
 import tempfile
-import sys
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-MODULE_PATH = Path(__file__).with_name('audio_transcriber.py')
-spec = importlib.util.spec_from_file_location('audio_transcriber', MODULE_PATH)
-transcriber = importlib.util.module_from_spec(spec)
-sys.modules['audio_transcriber'] = transcriber
-spec.loader.exec_module(transcriber)
+from bbdown_gui import transcriber
 
 
 class AudioTranscriberTests(unittest.TestCase):

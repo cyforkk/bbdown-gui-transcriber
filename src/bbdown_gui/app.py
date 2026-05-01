@@ -10,9 +10,28 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import List
 
-import audio_transcriber
-import download_bilibili_fav as downloader
+from bbdown_gui import downloader
+from bbdown_gui import transcriber
 
+
+
+
+def get_application_dir() -> Path:
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
+
+
+def detect_bbdown_executable() -> str:
+    local_bbdown = get_application_dir() / 'bbdown.exe'
+    if local_bbdown.exists():
+        return str(local_bbdown)
+
+    detected = shutil.which('bbdown')
+    if detected:
+        return detected
+
+    return 'bbdown'
 
 def get_subprocess_output_encoding() -> str:
     return locale.getpreferredencoding(False) or 'utf-8'
@@ -51,7 +70,7 @@ class BilibiliDownloaderUI:
         self.mode = tk.StringVar(value='audio')
         self.link = tk.StringVar()
         self.output_dir = tk.StringVar(value=str(Path.home() / 'Downloads'))
-        self.bbdown_path = tk.StringVar(value=shutil.which('bbdown') or 'bbdown')
+        self.bbdown_path = tk.StringVar(value=detect_bbdown_executable())
         self.transcribe_path = tk.StringVar()
         self.model_size = tk.StringVar(value='medium')
         self.device = tk.StringVar(value='cuda')
@@ -265,8 +284,8 @@ class BilibiliDownloaderUI:
         try:
             target_path = Path(target)
             if target_path.is_dir():
-                files = audio_transcriber.find_media_files(target_path)
-            elif audio_transcriber.is_supported_media_file(target_path):
+                files = transcriber.find_media_files(target_path)
+            elif transcriber.is_supported_media_file(target_path):
                 files = [target_path]
             else:
                 self.log('不支持的文件类型：{0}\n'.format(target_path))
@@ -276,13 +295,13 @@ class BilibiliDownloaderUI:
                 self.log('没有找到支持的音频/视频文件。\n')
                 return
 
-            transcriber = audio_transcriber.AudioTranscriber(
+            transcriber = transcriber.AudioTranscriber(
                 model_size=self.model_size.get().strip() or 'medium',
                 device=self.device.get().strip() or 'cuda',
                 compute_type=self.compute_type.get().strip() or 'int8_float16',
                 log=self.log,
             )
-            result = audio_transcriber.process_media_files(files, transcriber, should_stop=self.should_stop)
+            result = transcriber.process_media_files(files, transcriber, should_stop=self.should_stop)
             self.log_transcription_result(result)
         except Exception as exc:
             self.log('转文字任务失败：{0}\n'.format(exc))
@@ -325,7 +344,7 @@ class BilibiliDownloaderUI:
             for failure in result.failures:
                 self.log('- {0} {1}，原因：{2}\n'.format(failure.bvid, failure.title, failure.reason))
 
-    def log_transcription_result(self, result: audio_transcriber.BatchTranscriptionResult) -> None:
+    def log_transcription_result(self, result: transcriber.BatchTranscriptionResult) -> None:
         successes = [item for item in result.items if item.success]
         failures = [item for item in result.items if not item.success]
         self.log('========== 转文字统计 ==========' + '\n')

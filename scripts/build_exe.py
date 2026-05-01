@@ -4,8 +4,8 @@ import sys
 from pathlib import Path
 
 
-PROJECT_DIR = Path(__file__).resolve().parent
-ENTRY_FILE = PROJECT_DIR / 'bilibili_downloader_ui.py'
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+ENTRY_FILE = PROJECT_DIR / 'src' / 'bbdown_gui' / 'app.py'
 DIST_DIR = PROJECT_DIR / 'dist'
 BUILD_DIR = PROJECT_DIR / 'build'
 APP_NAME = 'BilibiliDownloaderUI'
