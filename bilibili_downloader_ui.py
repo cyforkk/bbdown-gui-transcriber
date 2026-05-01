@@ -10,6 +10,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import List
 
+import audio_transcriber
 import download_bilibili_fav as downloader
 
 
@@ -43,7 +44,7 @@ class BilibiliDownloaderUI:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title('BBDown 哔哩哔哩下载器')
-        self.root.geometry('860x620')
+        self.root.geometry('920x760')
 
         self.output_queue = queue.Queue()
         self.source_type = tk.StringVar(value='favorite')
@@ -51,6 +52,10 @@ class BilibiliDownloaderUI:
         self.link = tk.StringVar()
         self.output_dir = tk.StringVar(value=str(Path.home() / 'Downloads'))
         self.bbdown_path = tk.StringVar(value=shutil.which('bbdown') or 'bbdown')
+        self.transcribe_path = tk.StringVar()
+        self.model_size = tk.StringVar(value='medium')
+        self.device = tk.StringVar(value='cuda')
+        self.compute_type = tk.StringVar(value='int8_float16')
         self.status = tk.StringVar(value='就绪')
         self.is_running = False
         self.stop_requested = False
@@ -63,22 +68,27 @@ class BilibiliDownloaderUI:
         main_frame = ttk.Frame(self.root, padding=12)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        source_frame = ttk.LabelFrame(main_frame, text='下载来源', padding=10)
+        download_frame = ttk.LabelFrame(main_frame, text='下载功能', padding=10)
+        download_frame.pack(fill=tk.X)
+
+        source_frame = ttk.Frame(download_frame)
         source_frame.pack(fill=tk.X)
-        ttk.Radiobutton(source_frame, text='收藏夹链接', variable=self.source_type, value='favorite').pack(side=tk.LEFT)
+        ttk.Label(source_frame, text='下载来源').pack(side=tk.LEFT)
+        ttk.Radiobutton(source_frame, text='收藏夹链接', variable=self.source_type, value='favorite').pack(side=tk.LEFT, padx=(12, 0))
         ttk.Radiobutton(source_frame, text='单个视频链接 / BV号', variable=self.source_type, value='single').pack(side=tk.LEFT, padx=(20, 0))
 
-        link_frame = ttk.Frame(main_frame)
+        link_frame = ttk.Frame(download_frame)
         link_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Label(link_frame, text='链接 / BV号').pack(anchor=tk.W)
         ttk.Entry(link_frame, textvariable=self.link).pack(fill=tk.X, pady=(4, 0))
 
-        mode_frame = ttk.LabelFrame(main_frame, text='下载类型', padding=10)
+        mode_frame = ttk.Frame(download_frame)
         mode_frame.pack(fill=tk.X, pady=(10, 0))
-        ttk.Radiobutton(mode_frame, text='音频', variable=self.mode, value='audio').pack(side=tk.LEFT)
+        ttk.Label(mode_frame, text='下载类型').pack(side=tk.LEFT)
+        ttk.Radiobutton(mode_frame, text='音频', variable=self.mode, value='audio').pack(side=tk.LEFT, padx=(12, 0))
         ttk.Radiobutton(mode_frame, text='视频', variable=self.mode, value='video').pack(side=tk.LEFT, padx=(20, 0))
 
-        output_frame = ttk.Frame(main_frame)
+        output_frame = ttk.Frame(download_frame)
         output_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Label(output_frame, text='下载目录').pack(anchor=tk.W)
         output_row = ttk.Frame(output_frame)
@@ -86,7 +96,7 @@ class BilibiliDownloaderUI:
         ttk.Entry(output_row, textvariable=self.output_dir).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(output_row, text='选择目录', command=self.choose_output_dir).pack(side=tk.LEFT, padx=(8, 0))
 
-        bbdown_frame = ttk.Frame(main_frame)
+        bbdown_frame = ttk.Frame(download_frame)
         bbdown_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Label(bbdown_frame, text='BBDown 可执行文件').pack(anchor=tk.W)
         bbdown_row = ttk.Frame(bbdown_frame)
@@ -95,11 +105,31 @@ class BilibiliDownloaderUI:
         ttk.Button(bbdown_row, text='选择 bbdown', command=self.choose_bbdown_path).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(bbdown_row, text='自动检测', command=self.detect_bbdown).pack(side=tk.LEFT, padx=(8, 0))
 
+        transcribe_frame = ttk.LabelFrame(main_frame, text='转文字功能', padding=10)
+        transcribe_frame.pack(fill=tk.X, pady=(10, 0))
+
+        transcribe_path_row = ttk.Frame(transcribe_frame)
+        transcribe_path_row.pack(fill=tk.X)
+        ttk.Entry(transcribe_path_row, textvariable=self.transcribe_path).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(transcribe_path_row, text='选择文件', command=self.choose_transcribe_file).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(transcribe_path_row, text='选择文件夹', command=self.choose_transcribe_folder).pack(side=tk.LEFT, padx=(8, 0))
+
+        transcribe_options = ttk.Frame(transcribe_frame)
+        transcribe_options.pack(fill=tk.X, pady=(10, 0))
+        ttk.Label(transcribe_options, text='模型').pack(side=tk.LEFT)
+        ttk.Entry(transcribe_options, textvariable=self.model_size, width=12).pack(side=tk.LEFT, padx=(6, 16))
+        ttk.Label(transcribe_options, text='设备').pack(side=tk.LEFT)
+        ttk.Entry(transcribe_options, textvariable=self.device, width=10).pack(side=tk.LEFT, padx=(6, 16))
+        ttk.Label(transcribe_options, text='计算类型').pack(side=tk.LEFT)
+        ttk.Entry(transcribe_options, textvariable=self.compute_type, width=16).pack(side=tk.LEFT, padx=(6, 0))
+
         action_frame = ttk.Frame(main_frame)
         action_frame.pack(fill=tk.X, pady=(12, 0))
         self.start_button = ttk.Button(action_frame, text='开始下载', command=self.start_download)
         self.start_button.pack(side=tk.LEFT)
-        self.stop_button = ttk.Button(action_frame, text='停止下载', command=self.stop_download, state=tk.DISABLED)
+        self.transcribe_button = ttk.Button(action_frame, text='开始转文字', command=self.start_transcription)
+        self.transcribe_button.pack(side=tk.LEFT, padx=(8, 0))
+        self.stop_button = ttk.Button(action_frame, text='停止任务', command=self.stop_task, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=(8, 0))
         ttk.Label(action_frame, textvariable=self.status).pack(side=tk.LEFT, padx=(12, 0))
 
@@ -118,6 +148,16 @@ class BilibiliDownloaderUI:
         if selected:
             self.bbdown_path.set(selected)
 
+    def choose_transcribe_file(self) -> None:
+        selected = filedialog.askopenfilename(title='选择要转文字的音频/视频文件')
+        if selected:
+            self.transcribe_path.set(selected)
+
+    def choose_transcribe_folder(self) -> None:
+        selected = filedialog.askdirectory(title='选择要批量转文字的文件夹')
+        if selected:
+            self.transcribe_path.set(selected)
+
     def detect_bbdown(self) -> None:
         detected = shutil.which('bbdown')
         if detected:
@@ -126,10 +166,20 @@ class BilibiliDownloaderUI:
             return
         messagebox.showwarning('未检测到 BBDown', '未在 PATH 中检测到 bbdown，请手动选择 bbdown.exe。')
 
-    def start_download(self) -> None:
+    def prepare_task(self, status_text: str) -> bool:
         if self.is_running:
-            return
+            return False
+        self.is_running = True
+        self.stop_requested = False
+        self.current_process = None
+        self.start_button.configure(state=tk.DISABLED)
+        self.transcribe_button.configure(state=tk.DISABLED)
+        self.stop_button.configure(state=tk.NORMAL)
+        self.status.set(status_text)
+        self.append_log('========== 开始任务 ==========' + '\n')
+        return True
 
+    def start_download(self) -> None:
         source_text = self.link.get().strip()
         output_dir = self.output_dir.get().strip()
         bbdown_path = self.bbdown_path.get().strip() or 'bbdown'
@@ -140,16 +190,10 @@ class BilibiliDownloaderUI:
         if not output_dir:
             messagebox.showwarning('缺少下载目录', '请选择下载目录。')
             return
+        if not self.prepare_task('下载中...'):
+            return
 
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        self.is_running = True
-        self.stop_requested = False
-        self.current_process = None
-        self.start_button.configure(state=tk.DISABLED)
-        self.stop_button.configure(state=tk.NORMAL)
-        self.status.set('下载中...')
-        self.append_log('========== 开始任务 ==========' + '\n')
-
         thread = threading.Thread(
             target=self.run_download,
             args=(self.source_type.get(), source_text, self.mode.get(), output_dir, bbdown_path),
@@ -157,14 +201,28 @@ class BilibiliDownloaderUI:
         )
         thread.start()
 
-    def stop_download(self) -> None:
+    def start_transcription(self) -> None:
+        target = self.transcribe_path.get().strip()
+        if not target:
+            messagebox.showwarning('缺少文件或文件夹', '请选择要转文字的文件或文件夹。')
+            return
+        if not Path(target).exists():
+            messagebox.showwarning('路径不存在', '请选择存在的文件或文件夹。')
+            return
+        if not self.prepare_task('转文字中...'):
+            return
+
+        thread = threading.Thread(target=self.run_transcription, args=(target,), daemon=True)
+        thread.start()
+
+    def stop_task(self) -> None:
         if self.stop_requested:
             return
 
         self.stop_requested = True
         self.status.set('正在停止...')
         self.stop_button.configure(state=tk.DISABLED)
-        self.log('用户请求停止下载\n')
+        self.log('用户请求停止任务\n')
 
         process = self.current_process
         if process and process.poll() is None:
@@ -184,15 +242,8 @@ class BilibiliDownloaderUI:
             if source_type == 'single':
                 bvid = downloader.parse_video_id(source_text)
                 self.log('单个视频 BV: {0}\n'.format(bvid))
-                result = downloader.download_single_video(
-                    source_text,
-                    mode,
-                    output_dir,
-                    bbdown_path=bbdown_path,
-                    runner=self.run_bbdown_command,
-                    should_stop=self.should_stop,
-                )
-                self.log_result(result)
+                result = downloader.download_single_video(source_text, mode, output_dir, bbdown_path=bbdown_path, runner=self.run_bbdown_command, should_stop=self.should_stop)
+                self.log_download_result(result)
                 return
 
             media_id = downloader.parse_media_id(source_text)
@@ -203,17 +254,38 @@ class BilibiliDownloaderUI:
                 self.log('收藏夹为空，没有可下载的视频。\n')
                 return
             self.log('获取完成，共 {0} 个视频。\n'.format(len(videos)))
-            result = downloader.download_all(
-                videos,
-                mode,
-                output_dir,
-                bbdown_path=bbdown_path,
-                runner=self.run_bbdown_command,
-                should_stop=self.should_stop,
-            )
-            self.log_result(result)
+            result = downloader.download_all(videos, mode, output_dir, bbdown_path=bbdown_path, runner=self.run_bbdown_command, should_stop=self.should_stop)
+            self.log_download_result(result)
         except Exception as exc:
             self.log('任务失败：{0}\n'.format(exc))
+        finally:
+            self.output_queue.put(('DONE', self.stop_requested))
+
+    def run_transcription(self, target: str) -> None:
+        try:
+            target_path = Path(target)
+            if target_path.is_dir():
+                files = audio_transcriber.find_media_files(target_path)
+            elif audio_transcriber.is_supported_media_file(target_path):
+                files = [target_path]
+            else:
+                self.log('不支持的文件类型：{0}\n'.format(target_path))
+                return
+
+            if not files:
+                self.log('没有找到支持的音频/视频文件。\n')
+                return
+
+            transcriber = audio_transcriber.AudioTranscriber(
+                model_size=self.model_size.get().strip() or 'medium',
+                device=self.device.get().strip() or 'cuda',
+                compute_type=self.compute_type.get().strip() or 'int8_float16',
+                log=self.log,
+            )
+            result = audio_transcriber.process_media_files(files, transcriber, should_stop=self.should_stop)
+            self.log_transcription_result(result)
+        except Exception as exc:
+            self.log('转文字任务失败：{0}\n'.format(exc))
         finally:
             self.output_queue.put(('DONE', self.stop_requested))
 
@@ -241,7 +313,7 @@ class BilibiliDownloaderUI:
             self.current_process = None
         return return_code
 
-    def log_result(self, result: downloader.DownloadResult) -> None:
+    def log_download_result(self, result: downloader.DownloadResult) -> None:
         self.log('========== 下载统计 ==========' + '\n')
         self.log('总数：{0}\n'.format(result.total))
         self.log('成功：{0}\n'.format(len(result.successes)))
@@ -252,6 +324,18 @@ class BilibiliDownloaderUI:
             self.log('失败列表：\n')
             for failure in result.failures:
                 self.log('- {0} {1}，原因：{2}\n'.format(failure.bvid, failure.title, failure.reason))
+
+    def log_transcription_result(self, result: audio_transcriber.BatchTranscriptionResult) -> None:
+        successes = [item for item in result.items if item.success]
+        failures = [item for item in result.items if not item.success]
+        self.log('========== 转文字统计 ==========' + '\n')
+        self.log('总数：{0}\n'.format(result.total))
+        self.log('成功：{0}\n'.format(len(successes)))
+        self.log('失败：{0}\n'.format(len(failures)))
+        if result.cancelled:
+            self.log('状态：已停止\n')
+        for item in failures:
+            self.log('- {0}，原因：{1}\n'.format(item.input_path.name, item.error))
 
     def log(self, text: str) -> None:
         self.output_queue.put(text)
@@ -272,10 +356,11 @@ class BilibiliDownloaderUI:
                 self.is_running = False
                 self.current_process = None
                 self.start_button.configure(state=tk.NORMAL)
+                self.transcribe_button.configure(state=tk.NORMAL)
                 self.stop_button.configure(state=tk.DISABLED)
                 self.status.set('已停止' if stopped else '已完成')
                 if stopped:
-                    self.append_log('下载已停止\n')
+                    self.append_log('任务已停止\n')
                 self.append_log('========== 任务结束 ==========' + '\n')
                 continue
 

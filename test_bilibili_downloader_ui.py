@@ -34,7 +34,7 @@ class BilibiliDownloaderUITests(unittest.TestCase):
         with patch.object(ui_module.sys, 'platform', 'linux'):
             self.assertEqual(ui_module.get_hidden_subprocess_kwargs(), {})
 
-    def test_stop_download_marks_stop_and_terminates_current_process(self):
+    def test_stop_task_marks_stop_and_terminates_current_process(self):
         instance = object.__new__(ui_module.BilibiliDownloaderUI)
         process = Mock()
         process.poll.return_value = None
@@ -44,7 +44,7 @@ class BilibiliDownloaderUITests(unittest.TestCase):
         instance.stop_button = Mock()
         instance.log = Mock()
 
-        ui_module.BilibiliDownloaderUI.stop_download(instance)
+        ui_module.BilibiliDownloaderUI.stop_task(instance)
 
         self.assertTrue(instance.stop_requested)
         process.terminate.assert_called_once()
