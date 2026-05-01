@@ -16,7 +16,7 @@ def build_pyinstaller_command() -> list[str]:
         sys.executable,
         '-m',
         'PyInstaller',
-        '--onefile',
+        '--onedir',
         '--noconsole',
         '--clean',
         '--name',
@@ -37,6 +37,14 @@ def build_pyinstaller_command() -> list[str]:
     ]
 
 
+def get_build_app_dir() -> Path:
+    return DIST_DIR / APP_NAME
+
+
+def get_build_exe_path() -> Path:
+    return get_build_app_dir() / (APP_NAME + '.exe')
+
+
 def main() -> int:
     if not ENTRY_FILE.exists():
         print('入口文件不存在：{0}'.format(ENTRY_FILE), file=sys.stderr)
@@ -50,13 +58,14 @@ def main() -> int:
     if completed.returncode != 0:
         return completed.returncode
 
-    exe_path = DIST_DIR / (APP_NAME + '.exe')
+    app_dir = get_build_app_dir()
+    exe_path = get_build_exe_path()
     if not exe_path.exists():
-        print('打包结束，但未找到 exe：{0}'.format(exe_path), file=sys.stderr)
+        print('打包命令已完成，但未找到 exe：{0}'.format(exe_path), file=sys.stderr)
         return 1
 
-    print('打包完成：{0}'.format(exe_path))
-    print('文件大小：{0:.2f} MB'.format(exe_path.stat().st_size / 1024 / 1024))
+    print('打包完成：{0}'.format(app_dir))
+    print('启动文件：{0}'.format(exe_path))
     return 0
 
 

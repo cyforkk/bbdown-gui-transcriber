@@ -4,7 +4,7 @@
 
 - BBDown 收藏夹/单视频下载 GUI
 - Faster-Whisper 音频/视频转文字
-- Windows 单文件 exe 打包
+- Windows 文件夹版 exe 打包
 - 同目录 `bbdown.exe` 自动检测
 
 ## 推荐使用
@@ -12,7 +12,7 @@
 普通用户运行：
 
 ```text
-release\BilibiliDownloaderUI.exe
+release\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 ```
 
 如果不想安装或配置 BBDown，可以把 `bbdown.exe` 放到同一个目录：
@@ -140,6 +140,20 @@ uv run bbdown-gui
 uv run python -m unittest discover -s tests
 ```
 
+## 文件夹版发布说明
+
+当前 release 使用 PyInstaller `--onedir` 文件夹版，而不是 `--onefile` 单文件版。
+
+原因：转文字功能包含 CUDA、cuBLAS、cuDNN、Faster-Whisper 等大依赖，单文件 exe 每次启动都要先解压大文件，启动会很慢；文件夹版只在打包时展开，双击启动更快。
+
+普通用户请双击：
+
+```text
+release\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
+```
+
+如果要放 `bbdown.exe`，请放在这个 exe 同目录。
+
 ## 打包 exe
 
 ```bat
@@ -149,16 +163,16 @@ uv run python scripts\build_exe.py
 生成：
 
 ```text
-dist\BilibiliDownloaderUI.exe
+dist\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 ```
 
 发布版复制到：
 
 ```text
-release\BilibiliDownloaderUI.exe
+release\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 ```
 
-当前包含 Faster-Whisper 依赖后的 exe 约 91.58 MB。exe 不包含 BBDown 本体。
+当前使用文件夹版发布，避免单文件 exe 每次启动都解压 CUDA/Faster-Whisper 大依赖；发布目录不包含 BBDown 本体。
 
 ## 常见问题
 

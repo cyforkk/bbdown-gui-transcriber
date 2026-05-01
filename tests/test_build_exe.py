@@ -17,6 +17,18 @@ class BuildExeTests(unittest.TestCase):
         self.assertIn('nvidia.cublas', command)
         self.assertIn('nvidia.cudnn', command)
 
+    def test_pyinstaller_command_builds_onedir_release(self):
+        command = build_exe.build_pyinstaller_command()
+
+        self.assertIn('--onedir', command)
+        self.assertNotIn('--onefile', command)
+
+    def test_build_exe_path_uses_onedir_output_folder(self):
+        self.assertEqual(
+            build_exe.get_build_exe_path(),
+            build_exe.DIST_DIR / build_exe.APP_NAME / (build_exe.APP_NAME + '.exe'),
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
