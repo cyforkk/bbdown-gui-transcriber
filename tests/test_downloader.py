@@ -6,6 +6,10 @@ from unittest.mock import patch
 from bbdown_gui import downloader
 
 
+def write_valid_media_file(path: Path) -> None:
+    path.write_bytes(bytes([0, 0, 0, 24]) + b'ftypmp42' + (b'a' * 2048))
+
+
 class DownloadBilibiliFavTests(unittest.TestCase):
     def test_parse_media_id_from_favorite_url(self):
         url = 'https://space.bilibili.com/619278616/favlist?fid=3928433616&ftype=create'
@@ -87,7 +91,7 @@ class DownloadBilibiliFavTests(unittest.TestCase):
             def fake_runner(command):
                 if command[1] == 'BV_fail':
                     return 1
-                (output_dir / 'success.m4a').write_bytes(b'audio')
+                write_valid_media_file(output_dir / 'success.m4a')
                 return 0
 
             result = downloader.download_all(videos, 'audio', tmp, runner=fake_runner)
@@ -108,6 +112,54 @@ class DownloadBilibiliFavTests(unittest.TestCase):
         self.assertEqual(len(result.failures), 1)
         self.assertIn('未检测到下载文件', result.failures[0].reason)
 
+    def test_download_all_rejects_zero_filled_output_file(self):
+        videos = [downloader.FavoriteVideo(bvid='BV_zero', title='zero')]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+
+            def fake_runner(command):
+                (output_dir / 'zero.mp4').write_bytes(bytes([0]) * 4096)
+                return 0
+
+            result = downloader.download_all(videos, 'video', tmp, runner=fake_runner)
+
+        self.assertEqual(len(result.successes), 0)
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn('未检测到有效下载文件', result.failures[0].reason)
+
+    def test_download_all_rejects_tiny_output_file(self):
+        videos = [downloader.FavoriteVideo(bvid='BV_tiny', title='tiny')]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+
+            def fake_runner(command):
+                (output_dir / 'tiny.mp4').write_bytes(b'ftyp')
+                return 0
+
+            result = downloader.download_all(videos, 'video', tmp, runner=fake_runner)
+
+        self.assertEqual(len(result.successes), 0)
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn('未检测到有效下载文件', result.failures[0].reason)
+
+    def test_download_all_rejects_subtitle_only_output(self):
+        videos = [downloader.FavoriteVideo(bvid='BV_subtitle', title='subtitle')]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+
+            def fake_runner(command):
+                (output_dir / 'subtitle.srt').write_text('1' + chr(10) + 'hello', encoding='utf-8')
+                return 0
+
+            result = downloader.download_all(videos, 'video', tmp, runner=fake_runner)
+
+        self.assertEqual(len(result.successes), 0)
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn('未检测到有效下载文件', result.failures[0].reason)
+
     def test_download_all_accepts_success_when_output_file_created(self):
         videos = [downloader.FavoriteVideo(bvid='BV_success', title='ok')]
 
@@ -115,7 +167,7 @@ class DownloadBilibiliFavTests(unittest.TestCase):
             output_dir = Path(tmp)
 
             def fake_runner(command):
-                (output_dir / 'ok.m4a').write_bytes(b'audio')
+                write_valid_media_file(output_dir / 'ok.m4a')
                 return 0
 
             result = downloader.download_all(videos, 'audio', tmp, runner=fake_runner)
@@ -136,7 +188,7 @@ class DownloadBilibiliFavTests(unittest.TestCase):
 
             def fake_runner(command):
                 calls.append(command[1])
-                (output_dir / 'first.m4a').write_bytes(b'audio')
+                write_valid_media_file(output_dir / 'first.m4a')
                 stop['value'] = True
                 return 0
 
@@ -160,7 +212,7 @@ class DownloadBilibiliFavTests(unittest.TestCase):
 
             def fake_runner(command):
                 commands.append(command)
-                (output_dir / 'single.m4a').write_bytes(b'audio')
+                write_valid_media_file(output_dir / 'single.m4a')
                 return 0
 
             result = downloader.download_single_video(
@@ -182,7 +234,7 @@ class DownloadBilibiliFavTests(unittest.TestCase):
 
             def fake_runner(command):
                 commands.append(command)
-                (output_dir / 'custom.mp4').write_bytes(b'video')
+                write_valid_media_file(output_dir / 'custom.mp4')
                 return 0
 
             downloader.download_single_video(

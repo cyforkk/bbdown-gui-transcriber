@@ -125,6 +125,17 @@ DOWNLOAD_OUTPUT_EXTENSIONS = {
     '.srt',
     '.wav',
 }
+PRIMARY_MEDIA_EXTENSIONS = {
+    '.aac',
+    '.flac',
+    '.m4a',
+    '.m4s',
+    '.mkv',
+    '.mp3',
+    '.mp4',
+    '.wav',
+}
+MIN_DOWNLOAD_FILE_SIZE = 1024
 
 
 def snapshot_download_outputs(output_dir: str) -> Set[Path]:
@@ -136,6 +147,27 @@ def snapshot_download_outputs(output_dir: str) -> Set[Path]:
 
 def find_new_download_outputs(output_dir: str, before: Set[Path]) -> List[Path]:
     return sorted(snapshot_download_outputs(output_dir) - before, key=lambda path: str(path).lower())
+
+
+def has_nonzero_header(path: Path) -> bool:
+    with path.open('rb') as file:
+        data = file.read(4096)
+    return bool(data) and any(byte != 0 for byte in data)
+
+
+def is_valid_download_output(path: Path) -> bool:
+    if path.suffix.lower() not in PRIMARY_MEDIA_EXTENSIONS:
+        return False
+    try:
+        if path.stat().st_size < MIN_DOWNLOAD_FILE_SIZE:
+            return False
+        return has_nonzero_header(path)
+    except OSError:
+        return False
+
+
+def filter_valid_download_outputs(paths: Iterable[Path]) -> List[Path]:
+    return [path for path in paths if is_valid_download_output(path)]
 
 
 def run_command(command: List[str]) -> int:
@@ -194,8 +226,14 @@ def download_all(
                 failures.append(DownloadFailure(video.bvid, video.title, reason))
                 print('下载失败：{0}，原因：{1}'.format(video.bvid, reason), file=sys.stderr)
                 continue
+            valid_outputs = filter_valid_download_outputs(new_outputs)
+            if not valid_outputs:
+                reason = 'BBDown 执行完成，但未检测到有效下载文件'
+                failures.append(DownloadFailure(video.bvid, video.title, reason))
+                print('下载失败：{0}，原因：{1}'.format(video.bvid, reason), file=sys.stderr)
+                continue
             successes.append(video)
-            print('下载成功：{0}，文件：{1}'.format(video.bvid, new_outputs[0]))
+            print('下载成功：{0}，文件：{1}'.format(video.bvid, valid_outputs[0]))
             continue
 
         failures.append(DownloadFailure(video.bvid, video.title, 'BBDown exit code {0}'.format(exit_code)))
