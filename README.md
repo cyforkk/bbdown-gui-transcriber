@@ -9,41 +9,95 @@
 
 ## 推荐使用
 
-### 普通用户
+当前仓库推荐 **源码运行优先**，不提供大体积 GitHub Release 发布包。
 
-普通用户不需要 clone 源码仓库，建议到 GitHub Releases 下载发布包：
+原因：转文字功能依赖 Faster-Whisper、CUDA、cuBLAS、cuDNN、onnxruntime 等大文件。如果把完整 Windows 发布包上传到 GitHub Releases，压缩后仍可能超过 1GB，上传和下载都不稳定。
 
-```text
-BilibiliDownloaderUI-windows-x64.zip
+### 1. 克隆源码
+
+```bat
+git clone https://github.com/cyforkk/bbdown-gui-transcriber.git
+cd bbdown-gui-transcriber
 ```
 
-解压后双击：
+### 2. 安装 uv
 
-```text
-BilibiliDownloaderUI\BilibiliDownloaderUI.exe
+如果还没有安装 uv，请先安装 uv。
+
+安装完成后确认：
+
+```bat
+uv --version
 ```
 
-注意：当前发布版是文件夹版，请保持整个 `BilibiliDownloaderUI` 文件夹完整，不要只复制 exe。
-
-如果不想安装或配置 BBDown，可以把可独立运行的 `bbdown.exe` 放到 `BilibiliDownloaderUI.exe` 同目录：
-
-```text
-BilibiliDownloaderUI\
-├─ BilibiliDownloaderUI.exe
-├─ bbdown.exe                  # 可选，放这里会被自动识别
-└─ _internal\
-```
-
-### 开发者
-
-源码仓库不提交 `release/` 发布成品。clone 仓库后请使用 uv 运行源码：
+### 3. 安装 Python 依赖
 
 ```bat
 uv sync
+```
+
+`uv sync` 会根据 `pyproject.toml` 和 `uv.lock` 安装项目依赖，包括 Faster-Whisper 相关 Python 包。
+
+### 4. 安装或准备 BBDown
+
+本项目不内置 BBDown。
+
+如果使用 `.NET global tool` 安装 BBDown，可以执行：
+
+```bat
+dotnet tool install --global BBDown
+```
+
+确认 BBDown 可用：
+
+```bat
+bbdown --version
+```
+
+GUI 检测 BBDown 的顺序：
+
+1. exe 同目录的 `bbdown.exe`，并先执行 `--version` 校验可用性
+2. 源码运行时项目根目录的 `bbdown.exe`，并先执行 `--version` 校验可用性
+3. 系统 PATH 中的 `bbdown`，并先执行 `--version` 校验可用性
+4. 用户手动点击 `选择 bbdown`
+
+注意：`.NET global tool` 安装目录里的 `bbdown.exe` 不建议复制到项目目录或发布目录当便携版使用。如果复制后不可用，GUI 会自动跳过它并回退到 PATH 中的 BBDown。
+
+### 5. 运行 GUI
+
+推荐：
+
+```bat
 uv run bbdown-gui
 ```
 
-如需自己打包 Windows 发布包：
+或：
+
+```bat
+uv run python -m bbdown_gui.app
+```
+
+### 6. 转文字环境说明
+
+转文字功能基于 Faster-Whisper，默认配置：
+
+```text
+model=medium
+device=cuda
+compute_type=int8_float16
+```
+
+因此需要本机具备可用的 NVIDIA 显卡和驱动环境。
+
+如果遇到 CUDA DLL、cuBLAS、cuDNN 相关错误，请优先确认：
+
+- NVIDIA 驱动是否正常
+- `uv sync` 是否成功完成
+- 当前环境是否能正常加载 Faster-Whisper
+
+### 7. 可选：自行打包 Windows 文件夹版
+
+如果你希望在本机生成可双击运行的 Windows 文件夹版，可以执行：
 
 ```bat
 uv run python scripts\build_exe.py
@@ -55,16 +109,13 @@ uv run python scripts\build_exe.py
 dist\BilibiliDownloaderUI\
 ```
 
-需要发布给普通用户时，请将 `dist\BilibiliDownloaderUI\` 压缩为 zip 后上传到 GitHub Releases，不要提交到 git 仓库。
+启动文件：
 
-GUI 检测 BBDown 的顺序：
+```text
+dist\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
+```
 
-1. exe 同目录的 `bbdown.exe`，并先执行 `--version` 校验可用性
-2. 源码运行时项目根目录的 `bbdown.exe`，并先执行 `--version` 校验可用性
-3. 系统 PATH 中的 `bbdown`，并先执行 `--version` 校验可用性
-4. 用户手动点击 `选择 bbdown`
-
-注意：`.NET global tool` 安装目录里的 `bbdown.exe` 不建议复制到发布目录当便携版使用。如果复制后不可用，GUI 会自动跳过它并回退到 PATH 中的 BBDown。
+注意：打包目录可能很大，不建议提交到 git，也不建议上传超大 Release 包。源码仓库已经通过 `.gitignore` 忽略 `release/`、`dist/` 和 `build/`。
 
 ## 当前目录结构
 
@@ -173,21 +224,9 @@ uv run bbdown-gui
 uv run python -m unittest discover -s tests
 ```
 
-## 文件夹版发布说明
+## 可选：本地打包 Windows 文件夹版
 
-当前 release 使用 PyInstaller `--onedir` 文件夹版，而不是 `--onefile` 单文件版。
-
-原因：转文字功能包含 CUDA、cuBLAS、cuDNN、Faster-Whisper 等大依赖，单文件 exe 每次启动都要先解压大文件，启动会很慢；文件夹版只在打包时展开，双击启动更快。
-
-普通用户请双击：
-
-```text
-release\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
-```
-
-如果要放 `bbdown.exe`，请放在这个 exe 同目录。
-
-## 打包发布包
+本项目不再推荐上传大体积 Release 包。若你只是在自己电脑上使用，可以选择源码运行；如果确实需要 exe，可以本地打包：
 
 ```bat
 uv run python scripts\build_exe.py
@@ -199,7 +238,7 @@ uv run python scripts\build_exe.py
 dist\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 ```
 
-当前使用文件夹版发布，避免单文件 exe 每次启动都解压 CUDA/Faster-Whisper 大依赖。发布成品请压缩为 zip 后上传到 GitHub Releases，不要提交进 git 仓库；发布包不包含 BBDown 本体。
+文件夹版比单文件版启动更快，因为 CUDA、Faster-Whisper 等大依赖不需要每次启动都解压。但完整文件夹体积较大，不建议提交到 git。
 
 ## 常见问题
 
