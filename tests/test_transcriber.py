@@ -108,6 +108,11 @@ class AudioTranscriberTests(unittest.TestCase):
         self.assertTrue(kwargs['startupinfo'].dwFlags & transcriber.subprocess.STARTF_USESHOWWINDOW)
         self.assertEqual(kwargs['startupinfo'].wShowWindow, transcriber.subprocess.SW_HIDE)
 
+    def test_audio_transcriber_reports_missing_optional_dependency(self):
+        with patch.dict('sys.modules', {'faster_whisper': None}):
+            with self.assertRaisesRegex(RuntimeError, 'uv sync --extra transcribe'):
+                transcriber.AudioTranscriber(log=Mock())
+
 
 if __name__ == '__main__':
     unittest.main()

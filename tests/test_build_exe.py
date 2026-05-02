@@ -36,6 +36,20 @@ class BuildExeTests(unittest.TestCase):
         self.assertIn(build_exe.DIST_DIR / build_exe.APP_NAME / '_internal' / '_tcl_data', paths)
         self.assertIn(build_exe.DIST_DIR / build_exe.APP_NAME / '_internal' / '_tk_data', paths)
 
+    def test_lite_pyinstaller_command_skips_transcription_dependencies(self):
+        command = build_exe.build_pyinstaller_command('lite')
+
+        self.assertNotIn('faster_whisper', command)
+        self.assertNotIn('nvidia.cublas', command)
+        self.assertNotIn('nvidia.cudnn', command)
+
+    def test_full_pyinstaller_command_collects_transcription_dependencies(self):
+        command = build_exe.build_pyinstaller_command('full')
+
+        self.assertIn('faster_whisper', command)
+        self.assertIn('nvidia.cublas', command)
+        self.assertIn('nvidia.cudnn', command)
+
 
 if __name__ == '__main__':
     unittest.main()

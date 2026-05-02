@@ -32,11 +32,21 @@ uv --version
 
 ### 3. 安装 Python 依赖
 
+如果只需要下载视频/音频，不需要转文字，使用轻量安装：
+
 ```bat
 uv sync
 ```
 
-`uv sync` 会根据 `pyproject.toml` 和 `uv.lock` 安装项目依赖，包括 Faster-Whisper 相关 Python 包。
+轻量安装不会安装 Faster-Whisper、CUDA、cuBLAS、cuDNN 等转文字大依赖，安装更快，占用空间更小。
+
+如果需要使用转文字功能，再安装 `transcribe` 可选依赖：
+
+```bat
+uv sync --extra transcribe
+```
+
+`transcribe` extra 会安装 Faster-Whisper 以及 CUDA 转文字相关依赖。
 
 ### 4. 安装或准备 BBDown
 
@@ -89,6 +99,8 @@ compute_type=int8_float16
 
 因此需要本机具备可用的 NVIDIA 显卡和驱动环境。
 
+如果点击转文字时提示 `当前未安装转文字依赖，请执行：uv sync --extra transcribe`，请先安装 `transcribe` extra。
+
 如果遇到 CUDA DLL、cuBLAS、cuDNN 相关错误，请优先确认：
 
 - NVIDIA 驱动是否正常
@@ -97,17 +109,25 @@ compute_type=int8_float16
 
 ### 7. 可选：自行打包 Windows 文件夹版
 
-如果你希望在本机生成可双击运行的 Windows 文件夹版，可以执行：
+如果你希望在本机生成可双击运行的 Windows 文件夹版，可以按需求选择 lite 或 full 版本。
+
+只需要下载功能时，打包轻量版：
 
 ```bat
-uv run python scripts\build_exe.py
+uv run python scripts\build_exe.py --edition lite
+```
+
+需要转文字功能时，先安装转文字依赖，再打包 full 版：
+
+```bat
+uv sync --extra transcribe
+uv run python scripts\build_exe.py --edition full
 ```
 
 生成目录：
 
 ```text
-dist\BilibiliDownloaderUI\
-```
+dist\BilibiliDownloaderUI```
 
 启动文件：
 
@@ -115,7 +135,7 @@ dist\BilibiliDownloaderUI\
 dist\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 ```
 
-注意：打包目录可能很大，不建议提交到 git，也不建议上传超大 Release 包。源码仓库已经通过 `.gitignore` 忽略 `release/`、`dist/` 和 `build/`。
+文件夹版比单文件版启动更快，因为依赖不需要每次启动都解压。`lite` 版只包含下载功能，体积更小；`full` 版包含转文字相关依赖，体积明显更大。不建议把打包结果提交到 git。
 
 ## 当前目录结构
 
@@ -226,10 +246,19 @@ uv run python -m unittest discover -s tests
 
 ## 可选：本地打包 Windows 文件夹版
 
-本项目不再推荐上传大体积 Release 包。若你只是在自己电脑上使用，可以选择源码运行；如果确实需要 exe，可以本地打包：
+本项目不再推荐上传大体积 Release 包。若你只是在自己电脑上使用，可以选择源码运行；如果确实需要 exe，可以本地打包。
+
+只需要下载功能时，打包轻量版：
 
 ```bat
-uv run python scripts\build_exe.py
+uv run python scripts\build_exe.py --edition lite
+```
+
+需要转文字功能时，先安装转文字依赖，再打包 full 版：
+
+```bat
+uv sync --extra transcribe
+uv run python scripts\build_exe.py --edition full
 ```
 
 生成：
@@ -238,7 +267,7 @@ uv run python scripts\build_exe.py
 dist\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 ```
 
-文件夹版比单文件版启动更快，因为 CUDA、Faster-Whisper 等大依赖不需要每次启动都解压。但完整文件夹体积较大，不建议提交到 git。
+文件夹版比单文件版启动更快，因为依赖不需要每次启动都解压。`lite` 版只包含下载功能，体积更小；`full` 版包含转文字相关依赖，体积明显更大。不建议把打包结果提交到 git。
 
 ## 常见问题
 

@@ -4,7 +4,10 @@ version = "0.2.0"
 description = "BBDown GUI downloader with optional faster-whisper transcription"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+transcribe = [
     "faster-whisper>=1.2.1",
     "nvidia-cublas-cu12>=12.9.2.10",
     "nvidia-cudnn-cu12>=9.21.1.3",

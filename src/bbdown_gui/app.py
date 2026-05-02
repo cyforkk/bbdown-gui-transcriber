@@ -322,6 +322,12 @@ class BilibiliDownloaderUI:
             )
             result = transcriber.process_media_files(files, audio_model, should_stop=self.should_stop)
             self.log_transcription_result(result)
+        except RuntimeError as exc:
+            message = str(exc)
+            if message == transcriber.TRANSCRIBE_EXTRA_HINT:
+                self.log(message + '\n')
+            else:
+                self.log('转文字任务失败：{0}\n'.format(exc))
         except Exception as exc:
             self.log('转文字任务失败：{0}\n'.format(exc))
         finally:

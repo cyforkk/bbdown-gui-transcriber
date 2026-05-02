@@ -116,6 +116,27 @@ class BilibiliDownloaderUITests(unittest.TestCase):
 
         instance.log_transcription_result.assert_called_once_with(fake_result)
 
+    def test_run_transcription_logs_missing_optional_dependency_hint(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.model_size = Mock()
+        instance.model_size.get.return_value = 'medium'
+        instance.device = Mock()
+        instance.device.get.return_value = 'cuda'
+        instance.compute_type = Mock()
+        instance.compute_type.get.return_value = 'int8_float16'
+        instance.stop_requested = False
+        instance.output_queue = Mock()
+        instance.log = Mock()
+        instance.should_stop = Mock(return_value=False)
+
+        fake_path = Mock()
+        fake_path.is_dir.return_value = False
+
+        with patch.object(ui_module, 'Path', return_value=fake_path), patch.object(ui_module.transcriber, 'is_supported_media_file', return_value=True), patch.object(ui_module.transcriber, 'AudioTranscriber', side_effect=RuntimeError('当前未安装转文字依赖，请执行：uv sync --extra transcribe')):
+            ui_module.BilibiliDownloaderUI.run_transcription(instance, 'G:/提取/a.m4a')
+
+        instance.log.assert_any_call('当前未安装转文字依赖，请执行：uv sync --extra transcribe\n')
+
 
 if __name__ == '__main__':
     unittest.main()

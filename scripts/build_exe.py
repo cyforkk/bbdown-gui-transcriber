@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -11,8 +12,8 @@ BUILD_DIR = PROJECT_DIR / 'build'
 APP_NAME = 'BilibiliDownloaderUI'
 
 
-def build_pyinstaller_command() -> list[str]:
-    return [
+def build_pyinstaller_command(edition: str = 'full') -> list[str]:
+    command = [
         sys.executable,
         '-m',
         'PyInstaller',
@@ -21,12 +22,17 @@ def build_pyinstaller_command() -> list[str]:
         '--clean',
         '--name',
         APP_NAME,
-        '--collect-data',
-        'faster_whisper',
-        '--collect-binaries',
-        'nvidia.cublas',
-        '--collect-binaries',
-        'nvidia.cudnn',
+    ]
+    if edition == 'full':
+        command.extend([
+            '--collect-data',
+            'faster_whisper',
+            '--collect-binaries',
+            'nvidia.cublas',
+            '--collect-binaries',
+            'nvidia.cudnn',
+        ])
+    command.extend([
         '--distpath',
         str(DIST_DIR),
         '--workpath',
@@ -34,7 +40,8 @@ def build_pyinstaller_command() -> list[str]:
         '--specpath',
         str(PROJECT_DIR),
         str(ENTRY_FILE),
-    ]
+    ])
+    return command
 
 
 def get_build_app_dir() -> Path:
@@ -57,12 +64,19 @@ def find_missing_required_build_paths(app_dir: Path) -> list[Path]:
     return [path for path in get_required_build_paths(app_dir) if not path.exists()]
 
 
+def create_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='打包 BBDown GUI')
+    parser.add_argument('--edition', choices=['lite', 'full'], default='full', help='lite 只包含下载功能；full 包含转文字依赖')
+    return parser
+
+
 def main() -> int:
     if not ENTRY_FILE.exists():
         print('入口文件不存在：{0}'.format(ENTRY_FILE), file=sys.stderr)
         return 1
 
-    command = build_pyinstaller_command()
+    args = create_parser().parse_args()
+    command = build_pyinstaller_command(args.edition)
 
     print('执行打包命令：')
     print(' '.join(command))

@@ -10,6 +10,7 @@ from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 
 SUPPORTED_MEDIA_EXTENSIONS = ('.m4a', '.mp3', '.wav', '.flac', '.aac', '.mp4')
+TRANSCRIBE_EXTRA_HINT = '当前未安装转文字依赖，请执行：uv sync --extra transcribe'
 
 
 def get_hidden_subprocess_kwargs() -> dict:
@@ -113,7 +114,10 @@ class AudioTranscriber:
         self.log = log
         load_cuda_dlls()
         self.log('正在加载 Faster-Whisper 模型：model={0}, device={1}, compute_type={2}\n'.format(model_size, device, compute_type))
-        from faster_whisper import WhisperModel
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError as exc:
+            raise RuntimeError(TRANSCRIBE_EXTRA_HINT) from exc
         self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
     def transcribe_file(self, input_path: Path) -> TranscriptionResult:
