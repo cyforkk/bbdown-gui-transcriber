@@ -9,7 +9,7 @@
 
 ## 推荐使用
 
-当前仓库推荐 **源码运行优先**，不提供大体积 GitHub Release 发布包。
+当前仓库推荐 **源码运行优先**。GitHub Release 仅提供 **lite 版**（仅下载功能，由 CI 自动构建发布）；**full 版**（含转文字依赖）体积过大，需本地打包，不通过 Release 分发。
 
 原因：转文字功能依赖 Faster-Whisper、CUDA、cuBLAS、cuDNN、onnxruntime 等大文件。如果把完整 Windows 发布包上传到 GitHub Releases，压缩后仍可能超过 1GB，上传和下载都不稳定。
 
