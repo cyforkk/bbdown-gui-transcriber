@@ -86,6 +86,7 @@ CI 成功后，Release 页面会自动出现 `v0.2.2` 及其 zip 附件。releas
 - **不要推 `v*` 前缀的非版本标签**，例如 `v-test`，会误触发 CI。临时标签用其他前缀（如 `dev-`）。
 - lite 版**不包含转文字功能**。用户如需转文字，应按 README 使用 `uv sync --extra transcribe` 源码运行，或维护者本地打包 full 版。
 - 打包脚本 `scripts/build_exe.py` 在打包完成后会校验 `_tcl_data` / `_tk_data` 等 Tkinter 运行数据是否存在，缺失则构建失败，避免发布启动即崩溃的 exe。
+- Windows runner 默认控制台编码为 cp1252，`build_exe.py` 的中文 `print` 会触发 `UnicodeEncodeError`。工作流已通过 job 级别 `env: PYTHONUTF8: '1'` 启用 Python UTF-8 模式解决，修改源码时无需顾虑。
 - `pyproject.toml` 中默认 index 为清华镜像，CI（境外 runner）也能访问；若 CI 因镜像不稳定失败，可在工作流中用 `UV_INDEX_URL` 环境变量覆盖为 `https://pypi.org/simple`。
 - full 版仍需本地手动发布，流程不变，见 [GitHubRelease发布说明.md](GitHubRelease发布说明.md)。
 
