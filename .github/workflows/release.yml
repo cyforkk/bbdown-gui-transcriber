@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build (lite edition)
+        run: uv run python scripts/build_exe.py --edition lite
+
+      - name: Compress artifact
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/BilibiliDownloaderUI -DestinationPath BilibiliDownloaderUI-windows-x64-${{ github.ref_name }}.zip
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BilibiliDownloaderUI-windows-x64-${{ github.ref_name }}.zip
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
