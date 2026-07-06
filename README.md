@@ -52,7 +52,7 @@ uv sync --extra transcribe
 
 本项目不内置 BBDown。
 
-如果使用 `.NET global tool` 安装 BBDown，可以执行：
+如果使用 `.NET global tool` 安装 BBDown（此方式需要先安装 .NET SDK），可以执行：
 
 ```bat
 dotnet tool install --global BBDown
@@ -98,6 +98,8 @@ compute_type=int8_float16
 ```
 
 因此需要本机具备可用的 NVIDIA 显卡和驱动环境。
+
+转文字前还会调用 `ffprobe` 预校验媒体文件（可选）。如果系统 PATH 中没有 `ffprobe`（通常随 ffmpeg 一起安装），会跳过预校验，损坏或无音频流的文件要等到 Whisper 转写阶段才报错。建议安装 ffmpeg 以获得更好的体验。
 
 如果点击转文字时提示 `当前未安装转文字依赖，请执行：uv sync --extra transcribe`，请先安装 `transcribe` extra。
 
