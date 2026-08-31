@@ -66,12 +66,13 @@ bbdown --version
 
 GUI 检测 BBDown 的顺序：
 
-1. exe 同目录的 `bbdown.exe`，并先执行 `--version` 校验可用性
-2. 源码运行时项目根目录的 `bbdown.exe`，并先执行 `--version` 校验可用性
-3. 系统 PATH 中的 `bbdown`，并先执行 `--version` 校验可用性
-4. 用户手动点击 `选择 bbdown`
+1. 当前工作目录下的 `bbdown.exe` / `BBDown.exe`（文件名忽略大小写）
+2. 用户目录 `.dotnet/tools`（如 `C:\Users\<用户名>\.dotnet\tools\BBDown.exe`，忽略大小写）
+3. exe 同目录的 `bbdown.exe`（源码运行时为项目根目录）
+4. 系统 PATH 中的 `bbdown`
+5. 用户手动点击 `选择 bbdown`
 
-注意：`.NET global tool` 安装目录里的 `bbdown.exe` 不建议复制到项目目录或发布目录当便携版使用。如果复制后不可用，GUI 会自动跳过它并回退到 PATH 中的 BBDown。
+注意：`.NET global tool` 安装目录里的 `bbdown.exe` 不建议复制到项目目录或发布目录当便携版使用。检测链路已直接包含 `.dotnet/tools` 原始路径，无需复制。
 
 ### 5. 运行 GUI
 
@@ -193,6 +194,7 @@ uv run bbdown-gui
 ### 下载功能
 
 - 收藏夹批量下载
+- 视频合集批量下载（链接形如 `https://space.bilibili.com/<mid>/lists/<id>?type=season`）
 - 单个视频链接 / BV 号下载
 - 音频 / 视频二选一
 - 选择下载目录

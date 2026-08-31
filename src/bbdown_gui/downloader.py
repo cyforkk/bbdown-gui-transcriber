@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import re
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -101,6 +103,124 @@ def fetch_favorite_videos(media_id: str, referer: str) -> List[FavoriteVideo]:
                 videos.append(FavoriteVideo(bvid=bvid, title=str(media.get('title') or '')))
 
         if len(medias) < page_size:
+            return videos
+
+        page_number += 1
+
+
+def parse_collection_id(collection_url: str) -> tuple[str, str]:
+    path = urllib.parse.urlparse(collection_url.strip()).path
+    match = re.search(r'/(\d+)/lists/(\d+)', path)
+    if not match:
+        raise ValueError('视频合集链接格式无法识别，期望形如 https://space.bilibili.com/<mid>/lists/<id>?type=season')
+    return match.group(1), match.group(2)
+
+
+SEASON_LIST_API_URL = 'https://api.bilibili.com/x/polymer/web-space/seasons_archives_list'
+LEGACY_SEASON_LIST_API_URL = 'https://api.bilibili.com/x/polymer/space/seasons_archives_list'
+WBI_NAV_API_URL = 'https://api.bilibili.com/x/web-interface/nav'
+WBI_MIXIN_KEY_ENC_TAB = [
+    46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
+    27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
+    37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
+    22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
+]
+
+SEASON_SIGNED_ATTEMPT = (False, True)
+SEASON_PLAIN_ATTEMPT = (False, False)
+SEASON_LEGACY_ATTEMPT = (True, False)
+
+_wbi_mixin_key_cache = None
+
+
+def get_wbi_mixin_key():
+    global _wbi_mixin_key_cache
+    if _wbi_mixin_key_cache:
+        return _wbi_mixin_key_cache
+
+    try:
+        payload = read_json_from_url(WBI_NAV_API_URL, 'https://www.bilibili.com/')
+        wbi_img = ((payload.get('data') or {}).get('wbi_img') or {})
+        img_key = str(wbi_img.get('img_url') or '').rsplit('/', 1)[-1].split('.')[0]
+        sub_key = str(wbi_img.get('sub_url') or '').rsplit('/', 1)[-1].split('.')[0]
+        raw_key = img_key + sub_key
+    except Exception:
+        return None
+
+    if len(raw_key) < 64:
+        return None
+
+    _wbi_mixin_key_cache = ''.join(raw_key[index] for index in WBI_MIXIN_KEY_ENC_TAB)[:32]
+    return _wbi_mixin_key_cache
+
+
+def sign_wbi_params(params: dict, mixin_key: str) -> dict:
+    signed = {str(key): str(value) for key, value in params.items()}
+    signed['wts'] = str(int(time.time()))
+    query = urllib.parse.urlencode(sorted(signed.items()))
+    signed['w_rid'] = hashlib.md5((query + mixin_key).encode('utf-8')).hexdigest()
+    return signed
+
+
+def build_collection_api_url(mid: str, season_id: str, page_number: int, page_size: int, legacy: bool = False, signed: bool = False):
+    params = {
+        'mid': mid,
+        'season_id': season_id,
+        'sort_reverse': 'false',
+        'page_num': page_number,
+        'page_size': page_size,
+    }
+
+    if signed:
+        mixin_key = get_wbi_mixin_key()
+        if not mixin_key:
+            return None
+        params = sign_wbi_params(params, mixin_key)
+
+    base_url = LEGACY_SEASON_LIST_API_URL if legacy else SEASON_LIST_API_URL
+    return '{0}?{1}'.format(base_url, urllib.parse.urlencode(params))
+
+
+def read_season_payload(mid: str, season_id: str, referer: str, page_number: int, page_size: int, preferred_attempt=None) -> tuple[dict, tuple]:
+    attempts = [SEASON_SIGNED_ATTEMPT, SEASON_PLAIN_ATTEMPT, SEASON_LEGACY_ATTEMPT] if preferred_attempt is None else [preferred_attempt]
+    last_error: Exception = RuntimeError('获取视频合集失败：可能是合集不存在、合集为私有，或网络无法访问哔哩哔哩。')
+
+    for legacy, signed in attempts:
+        api_url = build_collection_api_url(mid, season_id, page_number, page_size, legacy=legacy, signed=signed)
+        if api_url is None:
+            continue
+
+        try:
+            payload = read_json_from_url(api_url, referer)
+        except Exception as exc:
+            last_error = exc
+            continue
+
+        if payload.get('code') == 0:
+            return payload, (legacy, signed)
+
+        last_error = RuntimeError('获取视频合集失败：{0}。可能是合集不存在或为私有。'.format(payload.get('message') or '未知错误'))
+
+    raise RuntimeError('获取视频合集失败：可能是合集不存在、合集为私有，或网络无法访问哔哩哔哩。') from last_error
+
+
+def fetch_collection_videos(mid: str, season_id: str, referer: str) -> List[FavoriteVideo]:
+    page_number = 1
+    page_size = 30
+    videos = []
+    preferred_attempt = None
+
+    while True:
+        payload, preferred_attempt = read_season_payload(mid, season_id, referer, page_number, page_size, preferred_attempt)
+
+        data = payload.get('data') or {}
+        archives = data.get('archives') or []
+        for archive in archives:
+            bvid = str(archive.get('bvid') or '').strip()
+            if bvid:
+                videos.append(FavoriteVideo(bvid=bvid, title=str(archive.get('title') or '')))
+
+        if len(archives) < page_size:
             return videos
 
         page_number += 1
@@ -260,6 +380,7 @@ def create_parser() -> argparse.ArgumentParser:
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument('--fav-url', help='哔哩哔哩收藏夹链接，必须包含 fid 参数。')
     source_group.add_argument('--video-url', help='单个哔哩哔哩视频链接或 BV 号。')
+    source_group.add_argument('--collection-url', help='哔哩哔哩视频合集链接，形如 https://space.bilibili.com/<mid>/lists/<id>?type=season。')
     parser.add_argument('--mode', required=True, choices=['audio', 'video'], help='下载模式：audio 只下载音频，video 下载视频。')
     parser.add_argument('--output-dir', required=True, help='下载目录，Windows 请直接传 G:\\xxx，Linux/macOS 请传 /path/to/dir。')
     parser.add_argument('--bbdown-path', default='bbdown', help='BBDown 可执行文件路径，默认使用 PATH 中的 bbdown。')
@@ -299,6 +420,21 @@ def main() -> int:
             bvid = parse_video_id(args.video_url)
             print('单个视频 BV: {0}'.format(bvid))
             result = download_single_video(args.video_url, args.mode, output_dir, args.bbdown_path)
+            print_result(result)
+            return 0
+
+        if args.collection_url:
+            mid, season_id = parse_collection_id(args.collection_url)
+            print('视频合集 season_id: {0}'.format(season_id))
+            print('正在获取视频合集列表...')
+
+            videos = fetch_collection_videos(mid, season_id, args.collection_url)
+            if not videos:
+                print('视频合集为空，没有可下载的视频。')
+                return 0
+
+            print('获取完成，共 {0} 个视频。'.format(len(videos)))
+            result = download_all(videos, args.mode, output_dir, args.bbdown_path)
             print_result(result)
             return 0
 

@@ -1,5 +1,7 @@
+import hashlib
 import tempfile
 import unittest
+import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,6 +41,117 @@ class DownloadBilibiliFavTests(unittest.TestCase):
     def test_parse_video_id_rejects_url_without_bv_id(self):
         with self.assertRaisesRegex(ValueError, 'BV'):
             downloader.parse_video_id('https://www.bilibili.com/')
+
+    def test_parse_collection_id_from_collection_url(self):
+        url = 'https://space.bilibili.com/3546743511714730/lists/7132285?type=season'
+
+        mid, season_id = downloader.parse_collection_id(url)
+
+        self.assertEqual(mid, '3546743511714730')
+        self.assertEqual(season_id, '7132285')
+
+    def test_parse_collection_id_rejects_url_without_lists_segment(self):
+        with self.assertRaisesRegex(ValueError, '合集'):
+            downloader.parse_collection_id('https://space.bilibili.com/3546743511714730/favlist?fid=123')
+
+    def test_fetch_collection_videos_paginates_and_extracts_bvid(self):
+        page_size = 30
+        first_page = {'code': 0, 'data': {'archives': [
+            {'bvid': 'BV{0}'.format(index), 'title': str(index)} for index in range(page_size)
+        ]}}
+        second_page = {'code': 0, 'data': {'archives': [
+            {'bvid': 'BVlast', 'title': 'last'},
+        ]}}
+
+        calls = {'count': 0}
+
+        def fake_read(url, referer):
+            calls['count'] += 1
+            return first_page if calls['count'] == 1 else second_page
+
+        with patch.object(downloader, 'get_wbi_mixin_key', return_value=None), patch.object(downloader, 'read_json_from_url', side_effect=fake_read):
+            videos = downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season')
+
+        self.assertEqual(len(videos), page_size + 1)
+        self.assertEqual(videos[0].bvid, 'BV0')
+        self.assertEqual(videos[-1].bvid, 'BVlast')
+
+    def test_fetch_collection_videos_raises_clear_message_on_api_error(self):
+        payload = {'code': -404, 'message': '合集不存在', 'data': None}
+
+        with patch.object(downloader, 'get_wbi_mixin_key', return_value=None), patch.object(downloader, 'read_json_from_url', return_value=payload):
+            with self.assertRaisesRegex(RuntimeError, '合集不存在|私有'):
+                downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season')
+
+    def test_build_collection_api_url_uses_season_list_endpoint(self):
+        url = downloader.build_collection_api_url('123', '456', 2, 30)
+
+        parsed = urllib.parse.urlparse(url)
+        self.assertEqual(parsed.netloc, 'api.bilibili.com')
+        self.assertEqual(parsed.path, '/x/polymer/web-space/seasons_archives_list')
+        query = urllib.parse.parse_qs(parsed.query)
+        self.assertEqual(query['mid'], ['123'])
+        self.assertEqual(query['season_id'], ['456'])
+        self.assertEqual(query['page_num'], ['2'])
+        self.assertEqual(query['page_size'], ['30'])
+        self.assertEqual(query['sort_reverse'], ['false'])
+
+    def test_build_collection_api_url_supports_legacy_endpoint(self):
+        url = downloader.build_collection_api_url('123', '456', 1, 30, legacy=True)
+
+        self.assertIn('x/polymer/space/seasons_archives_list', url)
+        self.assertNotIn('web-space', url)
+
+    def test_fetch_collection_videos_falls_back_to_legacy_endpoint(self):
+        page = {'code': 0, 'data': {'archives': [{'bvid': 'BVok', 'title': 'ok'}]}}
+
+        def fake_read(url, referer):
+            if 'web-space' in url:
+                raise OSError('blocked')
+            return page
+
+        with patch.object(downloader, 'get_wbi_mixin_key', return_value=None), patch.object(downloader, 'read_json_from_url', side_effect=fake_read):
+            videos = downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season')
+
+        self.assertEqual(len(videos), 1)
+        self.assertEqual(videos[0].bvid, 'BVok')
+
+    def test_fetch_collection_videos_uses_signed_endpoint_when_available(self):
+        page = {'code': 0, 'data': {'archives': [{'bvid': 'BVsigned', 'title': 'signed'}]}}
+
+        def fake_read(url, referer):
+            if 'w_rid' in url and 'web-space' in url:
+                return page
+            raise OSError('unexpected endpoint: {0}'.format(url))
+
+        with patch.object(downloader, 'get_wbi_mixin_key', return_value='a' * 32), patch.object(downloader, 'read_json_from_url', side_effect=fake_read):
+            videos = downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season')
+
+        self.assertEqual(len(videos), 1)
+        self.assertEqual(videos[0].bvid, 'BVsigned')
+
+    def test_sign_wbi_params_appends_wts_and_wrid(self):
+        signed = downloader.sign_wbi_params({'mid': '123', 'season_id': '456'}, 'a' * 32)
+
+        self.assertEqual(signed['mid'], '123')
+        self.assertEqual(signed['season_id'], '456')
+        self.assertTrue(signed['wts'].isdigit())
+        self.assertEqual(len(signed['w_rid']), 32)
+
+        expected_query = urllib.parse.urlencode(sorted({'mid': '123', 'season_id': '456', 'wts': signed['wts']}.items()))
+        expected_rid = hashlib.md5((expected_query + 'a' * 32).encode('utf-8')).hexdigest()
+        self.assertEqual(signed['w_rid'], expected_rid)
+
+    def test_parser_accepts_collection_url_source(self):
+        parser = downloader.create_parser()
+
+        args = parser.parse_args([
+            '--collection-url', 'https://space.bilibili.com/3546743511714730/lists/7132285?type=season',
+            '--mode', 'audio',
+            '--output-dir', r'G:\合集\音频',
+        ])
+
+        self.assertEqual(args.collection_url, 'https://space.bilibili.com/3546743511714730/lists/7132285?type=season')
 
     def test_parser_requires_favorite_or_single_video_source(self):
         parser = downloader.create_parser()

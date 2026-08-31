@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import locale
+import os
 import queue
 import shutil
 import subprocess
@@ -24,27 +25,39 @@ def get_application_dir() -> Path:
 
 
 def is_bbdown_usable(executable: str) -> bool:
-    try:
-        completed = subprocess.run(
-            [executable, '--version'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding=get_subprocess_output_encoding(),
-            errors='replace',
-            timeout=10,
-            **get_hidden_subprocess_kwargs()
-        )
-    except Exception:
+    path = Path(executable)
+    if not path.is_file():
         return False
+    if sys.platform == 'win32':
+        return path.suffix.lower() == '.exe' or path.suffix == ''
+    return os.access(path, os.X_OK)
 
-    return completed.returncode == 0
+
+def _is_bbdown_filename(name: str) -> bool:
+    return name.lower() in ('bbdown.exe', 'bbdown')
+
+
+def _find_bbdown_in_dir(directory: Path):
+    if not directory.is_dir():
+        return None
+    for entry in directory.iterdir():
+        if entry.is_file() and _is_bbdown_filename(entry.name):
+            return entry
+    return None
 
 
 def detect_bbdown_executable() -> str:
-    local_bbdown = get_application_dir() / 'bbdown.exe'
-    if local_bbdown.exists() and is_bbdown_usable(str(local_bbdown)):
-        return str(local_bbdown)
+    cwd_candidate = _find_bbdown_in_dir(Path.cwd())
+    if cwd_candidate and is_bbdown_usable(str(cwd_candidate)):
+        return str(cwd_candidate)
+
+    dotnet_candidate = _find_bbdown_in_dir(Path.home() / '.dotnet' / 'tools')
+    if dotnet_candidate and is_bbdown_usable(str(dotnet_candidate)):
+        return str(dotnet_candidate)
+
+    app_bbdown = get_application_dir() / 'bbdown.exe'
+    if app_bbdown.is_file() and is_bbdown_usable(str(app_bbdown)):
+        return str(app_bbdown)
 
     detected = shutil.which('bbdown')
     if detected and is_bbdown_usable(detected):
@@ -114,6 +127,7 @@ class BilibiliDownloaderUI:
         ttk.Label(source_frame, text='下载来源').pack(side=tk.LEFT)
         ttk.Radiobutton(source_frame, text='收藏夹链接', variable=self.source_type, value='favorite').pack(side=tk.LEFT, padx=(12, 0))
         ttk.Radiobutton(source_frame, text='单个视频链接 / BV号', variable=self.source_type, value='single').pack(side=tk.LEFT, padx=(20, 0))
+        ttk.Radiobutton(source_frame, text='视频合集链接', variable=self.source_type, value='collection').pack(side=tk.LEFT, padx=(20, 0))
 
         link_frame = ttk.Frame(download_frame)
         link_frame.pack(fill=tk.X, pady=(10, 0))
@@ -197,8 +211,8 @@ class BilibiliDownloaderUI:
             self.transcribe_path.set(selected)
 
     def detect_bbdown(self) -> None:
-        detected = shutil.which('bbdown')
-        if detected:
+        detected = detect_bbdown_executable()
+        if detected != 'bbdown':
             self.bbdown_path.set(detected)
             messagebox.showinfo('检测成功', '已检测到 BBDown：\n{0}'.format(detected))
             return
@@ -281,6 +295,19 @@ class BilibiliDownloaderUI:
                 bvid = downloader.parse_video_id(source_text)
                 self.log('单个视频 BV: {0}\n'.format(bvid))
                 result = downloader.download_single_video(source_text, mode, output_dir, bbdown_path=bbdown_path, runner=self.run_bbdown_command, should_stop=self.should_stop)
+                self.log_download_result(result)
+                return
+
+            if source_type == 'collection':
+                mid, season_id = downloader.parse_collection_id(source_text)
+                self.log('视频合集 season_id: {0}\n'.format(season_id))
+                self.log('正在获取视频合集列表...\n')
+                videos = downloader.fetch_collection_videos(mid, season_id, source_text)
+                if not videos:
+                    self.log('视频合集为空，没有可下载的视频。\n')
+                    return
+                self.log('获取完成，共 {0} 个视频。\n'.format(len(videos)))
+                result = downloader.download_all(videos, mode, output_dir, bbdown_path=bbdown_path, runner=self.run_bbdown_command, should_stop=self.should_stop)
                 self.log_download_result(result)
                 return
 
