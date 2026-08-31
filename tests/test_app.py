@@ -245,6 +245,143 @@ class BilibiliDownloaderUITests(unittest.TestCase):
 
             self.assertEqual(ui_module.detect_bbdown_executable(), 'USER_BBDOWN')
 
+    def test_start_download_routes_favorite_and_collection_to_selection_flow(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.link = Mock()
+        instance.link.get.return_value = 'https://space.bilibili.com/123/favlist?fid=456'
+        instance.output_dir = Mock()
+        instance.output_dir.get.return_value = 'OUTPUT_DIR'
+        instance.bbdown_path = Mock()
+        instance.bbdown_path.get.return_value = 'bbdown'
+        instance.source_type = Mock()
+        instance.source_type.get.return_value = 'collection'
+        instance.mode = Mock()
+        instance.mode.get.return_value = 'audio'
+        instance.prepare_task = Mock(return_value=True)
+
+        with patch.object(ui_module.messagebox, 'showwarning'), patch.object(ui_module.Path, 'mkdir'), patch.object(ui_module.threading, 'Thread') as thread_cls:
+            ui_module.BilibiliDownloaderUI.start_download(instance)
+
+        self.assertIs(thread_cls.call_args.kwargs['target'].__func__, ui_module.BilibiliDownloaderUI.run_fetch_and_select)
+
+    def test_start_download_routes_single_video_to_direct_download(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.link = Mock()
+        instance.link.get.return_value = 'BV1tkdVB4EpP'
+        instance.output_dir = Mock()
+        instance.output_dir.get.return_value = 'OUTPUT_DIR'
+        instance.bbdown_path = Mock()
+        instance.bbdown_path.get.return_value = 'bbdown'
+        instance.source_type = Mock()
+        instance.source_type.get.return_value = 'single'
+        instance.mode = Mock()
+        instance.mode.get.return_value = 'audio'
+        instance.prepare_task = Mock(return_value=True)
+
+        with patch.object(ui_module.messagebox, 'showwarning'), patch.object(ui_module.Path, 'mkdir'), patch.object(ui_module.threading, 'Thread') as thread_cls:
+            ui_module.BilibiliDownloaderUI.start_download(instance)
+
+        self.assertIs(thread_cls.call_args.kwargs['target'].__func__, ui_module.BilibiliDownloaderUI.run_download)
+
+    def test_run_fetch_and_select_schedules_dialog_for_collection(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.output_queue = Mock()
+        instance.log = Mock()
+        instance.stop_requested = False
+        instance.root = Mock()
+
+        videos = [ui_module.downloader.FavoriteVideo(bvid='BVcoll', title='c')]
+
+        with patch.object(ui_module.downloader, 'parse_collection_id', return_value=('123', '456')), patch.object(ui_module.downloader, 'fetch_collection_videos', return_value=videos):
+            ui_module.BilibiliDownloaderUI.run_fetch_and_select(instance, 'collection', 'https://example.com/lists/456?type=season', 'audio', 'OUT', 'bbdown')
+
+        instance.root.after.assert_called_once()
+        call_args = instance.root.after.call_args
+        self.assertEqual(call_args.args[0], 0)
+        self.assertEqual(call_args.args[1].__func__, ui_module.BilibiliDownloaderUI.handle_video_selection)
+        self.assertEqual(call_args.args[2], videos)
+
+    def test_run_fetch_and_select_schedules_dialog_for_favorite(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.output_queue = Mock()
+        instance.log = Mock()
+        instance.stop_requested = False
+        instance.root = Mock()
+
+        videos = [ui_module.downloader.FavoriteVideo(bvid='BVfav', title='f')]
+
+        with patch.object(ui_module.downloader, 'parse_media_id', return_value='456'), patch.object(ui_module.downloader, 'fetch_favorite_videos', return_value=videos):
+            ui_module.BilibiliDownloaderUI.run_fetch_and_select(instance, 'favorite', 'https://example.com/favlist?fid=456', 'audio', 'OUT', 'bbdown')
+
+        instance.root.after.assert_called_once()
+        self.assertEqual(instance.root.after.call_args.args[2], videos)
+
+    def test_run_fetch_and_select_empty_list_finishes_task(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.output_queue = Mock()
+        instance.log = Mock()
+        instance.stop_requested = False
+        instance.root = Mock()
+
+        with patch.object(ui_module.downloader, 'parse_collection_id', return_value=('123', '456')), patch.object(ui_module.downloader, 'fetch_collection_videos', return_value=[]):
+            ui_module.BilibiliDownloaderUI.run_fetch_and_select(instance, 'collection', 'https://example.com/lists/456?type=season', 'audio', 'OUT', 'bbdown')
+
+        instance.output_queue.put.assert_called_once_with(('DONE', False))
+        instance.root.after.assert_not_called()
+
+    def test_handle_video_selection_starts_download_thread_with_selection(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.output_queue = Mock()
+        instance.log = Mock()
+        instance.stop_requested = False
+        instance.root = Mock()
+
+        videos = [ui_module.downloader.FavoriteVideo(bvid='BV1', title='1'), ui_module.downloader.FavoriteVideo(bvid='BV2', title='2')]
+        selection = [videos[0]]
+
+        with patch.object(ui_module, 'open_video_selection_dialog', return_value=selection), patch.object(ui_module.threading, 'Thread') as thread_cls:
+            ui_module.BilibiliDownloaderUI.handle_video_selection(instance, videos, 'audio', 'OUT', 'bbdown')
+
+        thread_cls.assert_called_once()
+        self.assertEqual(thread_cls.call_args.kwargs['target'].__func__, ui_module.BilibiliDownloaderUI.run_download_selected)
+        self.assertEqual(thread_cls.call_args.kwargs['args'], (selection, 'audio', 'OUT', 'bbdown'))
+        thread_cls.return_value.start.assert_called_once()
+        instance.output_queue.put.assert_not_called()
+
+    def test_handle_video_selection_cancel_finishes_task(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.output_queue = Mock()
+        instance.log = Mock()
+        instance.stop_requested = False
+        instance.root = Mock()
+
+        videos = [ui_module.downloader.FavoriteVideo(bvid='BV1', title='1')]
+
+        with patch.object(ui_module, 'open_video_selection_dialog', return_value=[]), patch.object(ui_module.threading, 'Thread') as thread_cls:
+            ui_module.BilibiliDownloaderUI.handle_video_selection(instance, videos, 'audio', 'OUT', 'bbdown')
+
+        thread_cls.assert_not_called()
+        instance.output_queue.put.assert_called_once_with(('DONE', False))
+
+    def test_run_download_selected_downloads_and_logs(self):
+        instance = object.__new__(ui_module.BilibiliDownloaderUI)
+        instance.output_queue = Mock()
+        instance.log = Mock()
+        instance.log_download_result = Mock()
+        instance.stop_requested = False
+        instance.run_bbdown_command = Mock()
+
+        videos = [ui_module.downloader.FavoriteVideo(bvid='BV1', title='1')]
+        fake_result = ui_module.downloader.DownloadResult(total=1, successes=videos, failures=[], cancelled=False)
+
+        with patch.object(ui_module.downloader, 'download_all', return_value=fake_result) as download_all:
+            ui_module.BilibiliDownloaderUI.run_download_selected(instance, videos, 'audio', 'OUT', 'bbdown')
+
+        download_all.assert_called_once()
+        self.assertEqual(download_all.call_args.args[0], videos)
+        instance.log_download_result.assert_called_once_with(fake_result)
+        instance.output_queue.put.assert_called_with(('DONE', False))
+
     def test_run_download_collection_branch_fetches_and_downloads(self):
         instance = object.__new__(ui_module.BilibiliDownloaderUI)
         instance.output_queue = Mock()

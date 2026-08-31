@@ -52,15 +52,48 @@ def parse_video_id(video_url: str) -> str:
 
 
 def read_json_from_url(url: str, referer: str) -> dict:
-    request = urllib.request.Request(
-        url,
-        headers={
-            'User-Agent': 'Mozilla/5.0',
-            'Referer': referer,
-        },
-    )
-    with urllib.request.urlopen(request, timeout=20) as response:
-        return json.loads(response.read().decode('utf-8'))
+    headers = {
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': referer,
+    }
+    request = urllib.request.Request(url, headers=headers)
+
+    content_type = ''
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            raw = response.read()
+            content_type = (response.headers.get('Content-Type') if response.headers else '') or ''
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(
+            '请求被哔哩哔哩拒绝（HTTP {0}），通常是站点风控的临时性拦截，请稍等片刻再试。'.format(exc.code)
+        ) from exc
+
+    if 'json' not in content_type.lower():
+        raise RuntimeError(
+            '接口返回了拦截页而非数据（{0}），通常是哔哩哔哩风控的临时性拦截，请稍等片刻再试。'.format(content_type or 'Content-Type 缺失')
+        )
+
+    try:
+        return json.loads(raw.decode('utf-8'))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise RuntimeError('接口响应异常，可能被哔哩哔哩风控临时拦截，请稍后重试。') from exc
+
+
+def read_json_with_retry(url: str, referer: str, attempts: int = 3, on_retry=None) -> dict:
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return read_json_from_url(url, referer)
+        except RuntimeError as exc:
+            last_error = exc
+            message = str(exc)
+            is_risk_control = ('HTTP 4' in message) or ('拦截' in message) or ('响应异常' in message)
+            if not is_risk_control or attempt == attempts:
+                raise
+            if on_retry:
+                on_retry(attempt, exc)
+            time.sleep(2 * attempt)
+    raise last_error
 
 
 def build_favorite_api_url(media_id: str, page_number: int, page_size: int) -> str:
@@ -79,17 +112,19 @@ def build_favorite_api_url(media_id: str, page_number: int, page_size: int) -> s
     return 'https://api.bilibili.com/x/v3/fav/resource/list?{0}'.format(query)
 
 
-def fetch_favorite_videos(media_id: str, referer: str) -> List[FavoriteVideo]:
+def fetch_favorite_videos(media_id: str, referer: str, on_progress: Callable[[int], None] = None, on_warning: Callable[[str], None] = None) -> List[FavoriteVideo]:
     page_number = 1
     page_size = 20
     videos = []
+    seen = set()
+    reported_total = None
 
     while True:
         api_url = build_favorite_api_url(media_id, page_number, page_size)
         try:
-            payload = read_json_from_url(api_url, referer)
+            payload = read_json_with_retry(api_url, referer)
         except Exception as exc:
-            raise RuntimeError('获取收藏夹失败：可能是未登录、收藏夹为私有、收藏夹不存在，或网络无法访问哔哩哔哩。') from exc
+            raise RuntimeError('获取收藏夹失败：{0}。若稍后重试仍持续失败，可能是收藏夹为私有或不存在。'.format(exc)) from exc
 
         if payload.get('code') != 0:
             message = payload.get('message') or '未知错误'
@@ -97,15 +132,38 @@ def fetch_favorite_videos(media_id: str, referer: str) -> List[FavoriteVideo]:
 
         data = payload.get('data') or {}
         medias = data.get('medias') or []
+        if reported_total is None:
+            reported_total = ((data.get('info') or {}).get('media_count'))
+
+        new_count = 0
         for media in medias:
             bvid = str(media.get('bvid') or '').strip()
-            if bvid:
+            if bvid and bvid not in seen:
+                seen.add(bvid)
                 videos.append(FavoriteVideo(bvid=bvid, title=str(media.get('title') or '')))
+                new_count += 1
 
-        if len(medias) < page_size:
-            return videos
+        if on_progress:
+            on_progress(len(videos))
+
+        if new_count == 0:
+            break
+
+        if reported_total is not None and len(videos) >= reported_total:
+            break
 
         page_number += 1
+        if page_number > 500:
+            break
+
+    if reported_total is not None and len(videos) < reported_total:
+        warning = '警告：收藏夹共 {0} 个视频，实际获取到 {1} 个，其余可能是失效或受限视频。'.format(reported_total, len(videos))
+        if on_warning:
+            on_warning(warning + '\n')
+        else:
+            print(warning, file=sys.stderr)
+
+    return videos
 
 
 def parse_collection_id(collection_url: str) -> tuple[str, str]:
@@ -191,7 +249,7 @@ def read_season_payload(mid: str, season_id: str, referer: str, page_number: int
             continue
 
         try:
-            payload = read_json_from_url(api_url, referer)
+            payload = read_json_with_retry(api_url, referer)
         except Exception as exc:
             last_error = exc
             continue
@@ -204,26 +262,51 @@ def read_season_payload(mid: str, season_id: str, referer: str, page_number: int
     raise RuntimeError('获取视频合集失败：可能是合集不存在、合集为私有，或网络无法访问哔哩哔哩。') from last_error
 
 
-def fetch_collection_videos(mid: str, season_id: str, referer: str) -> List[FavoriteVideo]:
+def fetch_collection_videos(mid: str, season_id: str, referer: str, on_progress: Callable[[int], None] = None, on_warning: Callable[[str], None] = None) -> List[FavoriteVideo]:
     page_number = 1
     page_size = 30
     videos = []
+    seen = set()
     preferred_attempt = None
+    reported_total = None
 
     while True:
         payload, preferred_attempt = read_season_payload(mid, season_id, referer, page_number, page_size, preferred_attempt)
 
         data = payload.get('data') or {}
         archives = data.get('archives') or []
+        if reported_total is None:
+            reported_total = (data.get('page') or {}).get('total')
+
+        new_count = 0
         for archive in archives:
             bvid = str(archive.get('bvid') or '').strip()
-            if bvid:
+            if bvid and bvid not in seen:
+                seen.add(bvid)
                 videos.append(FavoriteVideo(bvid=bvid, title=str(archive.get('title') or '')))
+                new_count += 1
 
-        if len(archives) < page_size:
-            return videos
+        if on_progress:
+            on_progress(len(videos))
+
+        if new_count == 0:
+            break
+
+        if reported_total is not None and len(videos) >= reported_total:
+            break
 
         page_number += 1
+        if page_number > 500:
+            break
+
+    if reported_total is not None and len(videos) < reported_total:
+        warning = '警告：合集共 {0} 个视频，实际获取到 {1} 个，其余可能是失效或受限视频。'.format(reported_total, len(videos))
+        if on_warning:
+            on_warning(warning + '\n')
+        else:
+            print(warning, file=sys.stderr)
+
+    return videos
 
 
 def build_bbdown_command(bvid: str, mode: str, output_dir: str, bbdown_path: str = 'bbdown') -> List[str]:

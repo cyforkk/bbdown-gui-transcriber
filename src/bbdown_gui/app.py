@@ -91,6 +91,118 @@ class QueueWriter:
         pass
 
 
+def open_video_selection_dialog(parent: tk.Misc, videos: List[downloader.FavoriteVideo]) -> List[downloader.FavoriteVideo]:
+    result = {'confirmed': False}
+    dialog = tk.Toplevel(parent)
+    dialog.title('选择要下载的视频')
+    dialog.geometry('760x540')
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    selected = set(range(len(videos)))
+    visible = list(range(len(videos)))
+
+    top_bar = ttk.Frame(dialog, padding=(8, 4))
+    top_bar.pack(fill=tk.X)
+
+    count_label = ttk.Label(top_bar, text='')
+    count_label.pack(side=tk.RIGHT)
+
+    search_bar = ttk.Frame(dialog, padding=(8, 0))
+    search_bar.pack(fill=tk.X)
+    ttk.Label(search_bar, text='搜索过滤').pack(side=tk.LEFT)
+    search_var = tk.StringVar()
+    search_entry = ttk.Entry(search_bar, textvariable=search_var)
+    search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 0))
+
+    list_frame = ttk.Frame(dialog)
+    list_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+    listbox = tk.Listbox(list_frame, selectmode=tk.MULTIPLE, font=('TkFixedFont', 10), activestyle='dotbox')
+    scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=listbox.yview)
+    listbox.configure(yscrollcommand=scrollbar.set)
+    listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def video_label(index: int) -> str:
+        video = videos[index]
+        return '{0}. {1} {2}'.format(index + 1, video.bvid, video.title)
+
+    def refresh_list(*_) -> None:
+        keyword = search_var.get().strip().lower()
+        listbox.delete(0, tk.END)
+        visible.clear()
+        for index in range(len(videos)):
+            if keyword and keyword not in video_label(index).lower():
+                continue
+            visible.append(index)
+            listbox.insert(tk.END, video_label(index))
+            if index in selected:
+                listbox.select_set(tk.END)
+        update_count()
+
+    def sync_selection(*_) -> None:
+        checked = set(listbox.curselection())
+        for position, index in enumerate(visible):
+            if position in checked:
+                selected.add(index)
+            else:
+                selected.discard(index)
+        update_count()
+
+    def update_count(*_) -> None:
+        count_label.configure(text='已选 {0} / {1}（显示 {2}）'.format(len(selected), len(videos), len(visible)))
+
+    def set_visible(flag: bool) -> None:
+        for index in visible:
+            if flag:
+                selected.add(index)
+            else:
+                selected.discard(index)
+        refresh_list()
+
+    def invert_visible() -> None:
+        for index in visible:
+            if index in selected:
+                selected.discard(index)
+            else:
+                selected.add(index)
+        refresh_list()
+
+    ttk.Button(top_bar, text='全选', command=lambda: set_visible(True)).pack(side=tk.LEFT)
+    ttk.Button(top_bar, text='全不选', command=lambda: set_visible(False)).pack(side=tk.LEFT, padx=(8, 0))
+    ttk.Button(top_bar, text='反选', command=invert_visible).pack(side=tk.LEFT, padx=(8, 0))
+
+    search_var.trace_add('write', refresh_list)
+    listbox.bind('<<ListboxSelect>>', sync_selection)
+    refresh_list()
+    listbox.focus_set()
+
+    bottom_bar = ttk.Frame(dialog, padding=(8, 4))
+    bottom_bar.pack(fill=tk.X)
+
+    def confirm() -> None:
+        if not selected:
+            messagebox.showwarning('未选择视频', '请至少选择一个视频，或点击取消。', parent=dialog)
+            return
+        result['confirmed'] = True
+        result['selected'] = sorted(selected)
+        dialog.destroy()
+
+    def cancel() -> None:
+        dialog.destroy()
+
+    ttk.Button(bottom_bar, text='开始下载所选', command=confirm).pack(side=tk.RIGHT)
+    ttk.Button(bottom_bar, text='取消', command=cancel).pack(side=tk.RIGHT, padx=(0, 8))
+
+    dialog.protocol('WM_DELETE_WINDOW', cancel)
+    parent.wait_window(dialog)
+
+    if not result['confirmed']:
+        return []
+    return [videos[i] for i in result['selected']]
+
+
 class BilibiliDownloaderUI:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -246,9 +358,15 @@ class BilibiliDownloaderUI:
             return
 
         Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        source_type = self.source_type.get()
+        if source_type in ('favorite', 'collection'):
+            target = self.run_fetch_and_select
+        else:
+            target = self.run_download
         thread = threading.Thread(
-            target=self.run_download,
-            args=(self.source_type.get(), source_text, self.mode.get(), output_dir, bbdown_path),
+            target=target,
+            args=(source_type, source_text, self.mode.get(), output_dir, bbdown_path),
             daemon=True,
         )
         thread.start()
@@ -284,6 +402,61 @@ class BilibiliDownloaderUI:
     def should_stop(self) -> bool:
         return self.stop_requested
 
+    def run_fetch_and_select(self, source_type: str, source_text: str, mode: str, output_dir: str, bbdown_path: str) -> None:
+        try:
+            self.log('下载类型: {0}\n'.format(mode))
+            self.log('下载目录: {0}\n'.format(output_dir))
+            self.log('BBDown: {0}\n'.format(bbdown_path))
+
+            if source_type == 'collection':
+                mid, season_id = downloader.parse_collection_id(source_text)
+                self.log('视频合集 season_id: {0}\n'.format(season_id))
+                self.log('正在获取视频合集列表...\n')
+                videos = downloader.fetch_collection_videos(mid, season_id, source_text, on_progress=self.log_fetch_progress, on_warning=self.log)
+            else:
+                media_id = downloader.parse_media_id(source_text)
+                self.log('收藏夹 fid: {0}\n'.format(media_id))
+                self.log('正在获取收藏夹视频列表...\n')
+                videos = downloader.fetch_favorite_videos(media_id, source_text, on_progress=self.log_fetch_progress, on_warning=self.log)
+
+            if not videos:
+                self.log('获取到的列表为空，没有可下载的视频。\n')
+                self.output_queue.put(('DONE', self.stop_requested))
+                return
+
+            self.log('获取完成，共 {0} 个视频，请在弹窗中选择要下载的视频。\n'.format(len(videos)))
+            self.root.after(0, self.handle_video_selection, videos, mode, output_dir, bbdown_path)
+        except Exception as exc:
+            self.log('任务失败：{0}\n'.format(exc))
+            self.output_queue.put(('DONE', self.stop_requested))
+
+    def log_fetch_progress(self, count: int) -> None:
+        self.log('已获取 {0} 个视频...\n'.format(count))
+
+    def handle_video_selection(self, videos: List[downloader.FavoriteVideo], mode: str, output_dir: str, bbdown_path: str) -> None:
+        selection = open_video_selection_dialog(self.root, videos)
+        if not selection:
+            self.log('已取消选择，任务结束。\n')
+            self.output_queue.put(('DONE', self.stop_requested))
+            return
+
+        self.log('已选择 {0} / {1} 个视频，开始下载。\n'.format(len(selection), len(videos)))
+        thread = threading.Thread(
+            target=self.run_download_selected,
+            args=(selection, mode, output_dir, bbdown_path),
+            daemon=True,
+        )
+        thread.start()
+
+    def run_download_selected(self, videos: List[downloader.FavoriteVideo], mode: str, output_dir: str, bbdown_path: str) -> None:
+        try:
+            result = downloader.download_all(videos, mode, output_dir, bbdown_path=bbdown_path, runner=self.run_bbdown_command, should_stop=self.should_stop)
+            self.log_download_result(result)
+        except Exception as exc:
+            self.log('任务失败：{0}\n'.format(exc))
+        finally:
+            self.output_queue.put(('DONE', self.stop_requested))
+
     def run_download(self, source_type: str, source_text: str, mode: str, output_dir: str, bbdown_path: str) -> None:
         try:
             self.log('下载类型: {0}\n'.format(mode))
@@ -302,7 +475,7 @@ class BilibiliDownloaderUI:
                 mid, season_id = downloader.parse_collection_id(source_text)
                 self.log('视频合集 season_id: {0}\n'.format(season_id))
                 self.log('正在获取视频合集列表...\n')
-                videos = downloader.fetch_collection_videos(mid, season_id, source_text)
+                videos = downloader.fetch_collection_videos(mid, season_id, source_text, on_warning=self.log)
                 if not videos:
                     self.log('视频合集为空，没有可下载的视频。\n')
                     return
@@ -314,7 +487,7 @@ class BilibiliDownloaderUI:
             media_id = downloader.parse_media_id(source_text)
             self.log('收藏夹 fid: {0}\n'.format(media_id))
             self.log('正在获取收藏夹视频列表...\n')
-            videos = downloader.fetch_favorite_videos(media_id, source_text)
+            videos = downloader.fetch_favorite_videos(media_id, source_text, on_warning=self.log)
             if not videos:
                 self.log('收藏夹为空，没有可下载的视频。\n')
                 return

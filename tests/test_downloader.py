@@ -1,4 +1,5 @@
 import hashlib
+import io
 import tempfile
 import unittest
 import urllib.parse
@@ -69,12 +70,71 @@ class DownloadBilibiliFavTests(unittest.TestCase):
             calls['count'] += 1
             return first_page if calls['count'] == 1 else second_page
 
+        progress = []
         with patch.object(downloader, 'get_wbi_mixin_key', return_value=None), patch.object(downloader, 'read_json_from_url', side_effect=fake_read):
-            videos = downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season')
+            videos = downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season', on_progress=progress.append)
 
         self.assertEqual(len(videos), page_size + 1)
         self.assertEqual(videos[0].bvid, 'BV0')
         self.assertEqual(videos[-1].bvid, 'BVlast')
+        self.assertEqual(progress, [page_size, page_size + 1, page_size + 1])
+
+    def test_fetch_collection_videos_continues_past_short_page_until_total(self):
+        page_size = 30
+        reported_total = 61
+        short_page = {'code': 0, 'data': {'page': {'total': reported_total}, 'archives': [
+            {'bvid': 'BV{0}'.format(index), 'title': str(index)} for index in range(19)
+        ]}}
+        tail_page = {'code': 0, 'data': {'page': {'total': reported_total}, 'archives': [
+            {'bvid': 'BVtail', 'title': 'tail'},
+        ]}}
+
+        calls = {'count': 0}
+
+        def fake_read(url, referer):
+            calls['count'] += 1
+            if calls['count'] == 1:
+                return {'code': 0, 'data': {'page': {'total': reported_total}, 'archives': [
+                    {'bvid': 'BVhead{0}'.format(index), 'title': str(index)} for index in range(page_size)
+                ]}}
+            if calls['count'] == 2:
+                return short_page
+            return tail_page
+
+        with patch.object(downloader, 'get_wbi_mixin_key', return_value=None), patch.object(downloader, 'read_json_from_url', side_effect=fake_read):
+            videos = downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season')
+
+        self.assertEqual(len(videos), page_size + 19 + 1)
+        self.assertEqual(calls['count'], 4)
+
+    def test_fetch_collection_videos_warns_when_total_not_reachable(self):
+        reported_total = 1111
+        page = {'code': 0, 'data': {'page': {'total': reported_total}, 'archives': [
+            {'bvid': 'BVonly', 'title': 'only'},
+        ]}}
+
+        with patch.object(downloader, 'get_wbi_mixin_key', return_value=None), patch.object(downloader, 'read_json_from_url', return_value=page), patch('sys.stderr', new_callable=io.StringIO) as fake_err:
+            videos = downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season')
+
+        self.assertEqual(len(videos), 1)
+        self.assertIn('1111', fake_err.getvalue())
+        self.assertIn('实际获取到 1 个', fake_err.getvalue())
+
+    def test_fetch_collection_videos_warning_goes_to_callback_when_provided(self):
+        reported_total = 1111
+        page = {'code': 0, 'data': {'page': {'total': reported_total}, 'archives': [
+            {'bvid': 'BVonly', 'title': 'only'},
+        ]}}
+
+        warnings = []
+        with patch.object(downloader, 'get_wbi_mixin_key', return_value=None), patch.object(downloader, 'read_json_from_url', return_value=page), patch('sys.stderr', new_callable=io.StringIO) as fake_err:
+            videos = downloader.fetch_collection_videos('3546743511714730', '7132285', 'https://example.com/lists/7132285?type=season', on_warning=warnings.append)
+
+        self.assertEqual(len(videos), 1)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('实际获取到 1 个', warnings[0])
+        self.assertTrue(warnings[0].endswith('\n'))
+        self.assertEqual(fake_err.getvalue(), '')
 
     def test_fetch_collection_videos_raises_clear_message_on_api_error(self):
         payload = {'code': -404, 'message': '合集不存在', 'data': None}
@@ -191,6 +251,47 @@ class DownloadBilibiliFavTests(unittest.TestCase):
         with patch.object(downloader, 'read_json_from_url', return_value=payload):
             with self.assertRaisesRegex(RuntimeError, '未登录|私有|不存在'):
                 downloader.fetch_favorite_videos('3928433616', 'https://example.com/favlist?fid=3928433616')
+
+    def test_fetch_favorite_videos_wraps_risk_control_error_with_friendly_hint(self):
+        with patch.object(downloader, 'read_json_from_url', side_effect=RuntimeError('接口返回了拦截页而非数据（text/html），通常是哔哩哔哩风控的临时性拦截')), patch.object(downloader.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, '获取收藏夹失败'):
+                downloader.fetch_favorite_videos('3928433616', 'https://example.com/favlist?fid=3928433616')
+
+    def test_read_json_with_retry_retries_on_risk_control_then_succeeds(self):
+        responses = [
+            RuntimeError('请求被哔哩哔哩拒绝（HTTP 412），通常是站点风控的临时性拦截'),
+            RuntimeError('接口返回了拦截页而非数据（text/html），通常是哔哩哔哩风控的临时性拦截'),
+            {'code': 0, 'data': {}},
+        ]
+        calls = {'count': 0}
+
+        def fake_read(url, referer):
+            item = responses[calls['count']]
+            calls['count'] += 1
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        with patch.object(downloader, 'read_json_from_url', side_effect=fake_read), patch.object(downloader.time, 'sleep') as fake_sleep:
+            payload = downloader.read_json_with_retry('https://example.com/api', 'https://example.com/')
+
+        self.assertEqual(payload, {'code': 0, 'data': {}})
+        self.assertEqual(calls['count'], 3)
+        self.assertEqual(fake_sleep.call_count, 2)
+
+    def test_read_json_with_retry_does_not_retry_non_risk_errors(self):
+        calls = {'count': 0}
+
+        def fake_read(url, referer):
+            calls['count'] += 1
+            raise RuntimeError('请求超时')
+
+        with patch.object(downloader, 'read_json_from_url', side_effect=fake_read), patch.object(downloader.time, 'sleep') as fake_sleep:
+            with self.assertRaisesRegex(RuntimeError, '请求超时'):
+                downloader.read_json_with_retry('https://example.com/api', 'https://example.com/')
+
+        self.assertEqual(calls['count'], 1)
+        fake_sleep.assert_not_called()
 
     def test_download_all_skips_failed_video(self):
         videos = [
