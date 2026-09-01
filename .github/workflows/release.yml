@@ -4,21 +4,69 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已存在的 tag，如 v0.2.2'
+        required: true
+        type: string
+      skip_version_check:
+        description: '跳过 tag 与 pyproject.toml version 一致性校验'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  resolve:
+    name: Resolve tag and verify version
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+      ref: ${{ steps.t.outputs.ref }}
+    steps:
+      - id: t
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "ref=refs/tags/${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "ref=${{ github.ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build (Windows lite edition)
+    needs: resolve
+    runs-on: windows-2022
     env:
       PYTHONUTF8: '1'
-
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+
+      - name: Verify tag matches pyproject.toml version
+        shell: pwsh
+        run: |
+          $tag = "${{ needs.resolve.outputs.tag }}"
+          $skip = "${{ github.event.inputs.skip_version_check }}"
+          $pyprojectVersion = (Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | ForEach-Object { $_.Matches[0].Groups[1].Value })
+          $expected = $tag.TrimStart('v')
+          if ($skip -eq 'true') {
+            Write-Host "已通过 skip_version_check 跳过校验（tag=$tag, pyproject=$pyprojectVersion）。"
+          } elseif ($pyprojectVersion -ne $expected) {
+            Write-Error "tag ($tag) 与 pyproject.toml version ($pyprojectVersion) 不一致。请先同步版本号再触发。"
+            exit 1
+          } else {
+            Write-Host "版本校验通过：$tag == $pyprojectVersion"
+          }
 
       - name: Install dependencies
         run: uv sync
@@ -29,13 +77,44 @@ jobs:
       - name: Compress artifact
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/BilibiliDownloaderUI -DestinationPath BilibiliDownloaderUI-windows-x64-${{ github.ref_name }}.zip
+          $tag = "${{ needs.resolve.outputs.tag }}"
+          Compress-Archive -Path dist/BilibiliDownloaderUI -DestinationPath BilibiliDownloaderUI-windows-x64-$tag.zip
+
+      - name: Verify zip contents
+        shell: pwsh
+        run: |
+          $tag = "${{ needs.resolve.outputs.tag }}"
+          $zip = "BilibiliDownloaderUI-windows-x64-$tag.zip"
+          if (-not (Test-Path $zip)) { throw "未生成 $zip" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $entries = [System.IO.Compression.ZipFile]::OpenRead($zip).Entries.FullName
+          Write-Host "zip 内条目（前 10）:"
+          $entries | Select-Object -First 10
+          if (-not ($entries -match '^BilibiliDownloaderUI/BilibiliDownloaderUI\.exe$')) {
+            throw "zip 内未找到 BilibiliDownloaderUI/BilibiliDownloaderUI.exe，结构异常"
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BilibiliDownloaderUI-windows-x64-${{ needs.resolve.outputs.tag }}
+          path: BilibiliDownloaderUI-windows-x64-${{ needs.resolve.outputs.tag }}.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish to GitHub Release
+    needs: [resolve, build]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: BilibiliDownloaderUI-windows-x64-${{ needs.resolve.outputs.tag }}
+          path: dist-artifact
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: BilibiliDownloaderUI-windows-x64-${{ github.ref_name }}.zip
-          tag_name: ${{ github.ref_name }}
+          files: dist-artifact/BilibiliDownloaderUI-windows-x64-${{ needs.resolve.outputs.tag }}.zip
+          tag_name: ${{ needs.resolve.outputs.tag }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

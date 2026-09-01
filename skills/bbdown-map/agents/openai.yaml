@@ -1,0 +1,7 @@
+interface:
+  display_name: "BBDown GUI 项目地图"
+  short_description: "BBDown GUI 项目的模块边界、核心数据类与历史踩坑。"
+  default_prompt: "使用 $bbdown-map 帮我熟悉或定位 BBDown GUI 项目的代码结构。"
+
+policy:
+  allow_implicit_invocation: true

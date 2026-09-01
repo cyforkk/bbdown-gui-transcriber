@@ -415,3 +415,55 @@ BilibiliDownloaderUI\
 3. 解压后双击 `BilibiliDownloaderUI\BilibiliDownloaderUI.exe` 是否可以正常启动和使用。
 
 只要这三点满足，压缩包大小略有差异通常没有问题。
+
+## 用 gh 快速发布（手动 / 重跑）
+
+GitHub CLI 可以本地创建 tag + 上传产物，无需等 CI。适合本地手动发布或 CI 失败后重跑。
+
+### 前置
+
+```bash
+gh --version
+gh auth login
+gh auth status
+```
+
+### 本地手动打包并发布
+
+```bash
+cd d:\bbdown脚本
+uv run python scripts\build_exe.py --edition lite
+
+$tag = "v0.2.3"
+Compress-Archive -Path dist\BilibiliDownloaderUI -DestinationPath BilibiliDownloaderUI-windows-x64-$tag.zip
+
+gh release create $tag BilibiliDownloaderUI-windows-x64-$tag.zip ^
+  --title "BilibiliDownloaderUI $tag" ^
+  --generate-notes
+```
+
+`-generate-notes` 让 GitHub 按 commit 自动生成 release notes，可后续在网页手动编辑。
+
+### 已存在 tag，只想补传产物
+
+```bash
+gh release upload v0.2.3 BilibiliDownloaderUI-windows-x64-v0.2.3.zip --clobber
+```
+
+### 触发 CI 用现有 tag 重跑
+
+默认分支上已有 workflow 文件时，可以用 `workflow_dispatch` 用指定 tag 重跑：
+
+```bash
+gh workflow run Release -f tag=v0.2.3
+```
+
+或加 `-f skip_version_check=true` 跳过 tag 与 pyproject 版本一致性校验（紧急发版时使用）。
+
+### 查看流水线与日志
+
+```bash
+gh run list --workflow=Release
+gh run watch
+gh run view <run-id> --log-failed
+```

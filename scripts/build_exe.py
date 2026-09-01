@@ -64,6 +64,16 @@ def find_missing_required_build_paths(app_dir: Path) -> list[Path]:
     return [path for path in get_required_build_paths(app_dir) if not path.exists()]
 
 
+def write_release_readme(app_dir: Path) -> None:
+    source = Path(__file__).resolve().parent / 'release_readme.txt'
+    if not source.exists():
+        print('未找到发布 README 模板：{0}'.format(source), file=sys.stderr)
+        return
+    target = app_dir / 'README.txt'
+    target.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
+    print('已写入发布说明：{0}'.format(target))
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='打包 BBDown GUI')
     parser.add_argument('--edition', choices=['lite', 'full'], default='full', help='lite 只包含下载功能；full 包含转文字依赖')
@@ -92,6 +102,8 @@ def main() -> int:
         for missing_path in missing_paths:
             print('- {0}'.format(missing_path), file=sys.stderr)
         return 1
+
+    write_release_readme(app_dir)
 
     print('打包完成：{0}'.format(app_dir))
     print('启动文件：{0}'.format(exe_path))

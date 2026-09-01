@@ -118,7 +118,7 @@ def open_video_selection_dialog(parent: tk.Misc, videos: List[downloader.Favorit
     list_frame = ttk.Frame(dialog)
     list_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
-    listbox = tk.Listbox(list_frame, selectmode=tk.MULTIPLE, font=('TkFixedFont', 10), activestyle='dotbox')
+    listbox = tk.Listbox(list_frame, selectmode=tk.EXTENDED, font=('TkFixedFont', 10), activestyle='dotbox')
     scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=listbox.yview)
     listbox.configure(yscrollcommand=scrollbar.set)
     listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)

@@ -1,4 +1,7 @@
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from scripts import build_exe
 
@@ -28,6 +31,27 @@ class BuildExeTests(unittest.TestCase):
             build_exe.get_build_exe_path(),
             build_exe.DIST_DIR / build_exe.APP_NAME / (build_exe.APP_NAME + '.exe'),
         )
+
+    def test_write_release_readme_copies_template_to_app_dir(self):
+        template = Path(build_exe.__file__).resolve().parent / 'release_readme.txt'
+        self.assertTrue(template.exists(), 'release_readme.txt 模板应存在')
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = Path(tmp) / build_exe.APP_NAME
+            app_dir.mkdir()
+            build_exe.write_release_readme(app_dir)
+
+            readme = app_dir / 'README.txt'
+            self.assertTrue(readme.exists())
+            self.assertEqual(readme.read_text(encoding='utf-8'), template.read_text(encoding='utf-8'))
+
+    def test_write_release_readme_warns_when_template_missing(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(build_exe.Path, 'exists', return_value=False):
+            app_dir = Path(tmp) / build_exe.APP_NAME
+            app_dir.mkdir()
+            build_exe.write_release_readme(app_dir)
+
+            self.assertFalse((app_dir / 'README.txt').exists())
 
     def test_required_build_paths_include_tkinter_runtime_data(self):
         paths = build_exe.get_required_build_paths(build_exe.DIST_DIR / build_exe.APP_NAME)

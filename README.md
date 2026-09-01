@@ -13,6 +13,16 @@
 
 原因：转文字功能依赖 Faster-Whisper、CUDA、cuBLAS、cuDNN、onnxruntime 等大文件。如果把完整 Windows 发布包上传到 GitHub Releases，压缩后仍可能超过 1GB，上传和下载都不稳定。
 
+## 下载发布版
+
+前往 [GitHub Releases](https://github.com/cyforkk/bbdown-gui-transcriber/releases)，下载对应版本的 `BilibiliDownloaderUI-windows-x64-vX.Y.Z.zip`：
+
+1. 解压 zip（建议保留顶层 `BilibiliDownloaderUI` 文件夹完整，不要只复制 exe）。
+2. 双击 `BilibiliDownloaderUI\BilibiliDownloaderUI.exe` 启动。
+3. BBDown 不内置：把 `bbdown.exe` 放到 exe 同目录，或依赖 `C:\Users\<用户名>\.dotnet\tools\BBDown.exe`，或在 GUI 中手动选择。
+
+需要转文字的用户请按下文源码运行（`uv sync --extra transcribe`），或维护者本地打包 full 版（流程见 `docs/本地打包指南.md`）。
+
 ### 1. 克隆源码
 
 ```bat
@@ -139,6 +149,8 @@ dist\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
 ```
 
 文件夹版比单文件版启动更快，因为依赖不需要每次启动都解压。`lite` 版只包含下载功能，体积更小；`full` 版包含转文字相关依赖，体积明显更大。不建议把打包结果提交到 git。
+
+> 完整打包流程、产物结构、验证与常见问题见 `docs/本地打包指南.md`。
 
 ## 当前目录结构
 
