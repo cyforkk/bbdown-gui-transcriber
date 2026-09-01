@@ -2,7 +2,8 @@
 
 这是一个基于 `uv` 管理的 Python/Tkinter 桌面工具，集成：
 
-- BBDown 收藏夹/单视频下载 GUI
+- BBDown 收藏夹 / 视频合集 / 单视频下载 GUI
+- 下载前视频选择弹窗（全选 / 反选 / 搜索过滤，支持 Shift / Ctrl 多选）
 - Faster-Whisper 音频/视频转文字
 - Windows 文件夹版 exe 打包
 - 同目录 `bbdown.exe` 自动检测
@@ -140,7 +141,8 @@ uv run python scripts\build_exe.py --edition full
 生成目录：
 
 ```text
-dist\BilibiliDownloaderUI```
+dist\BilibiliDownloaderUI\
+```
 
 启动文件：
 
@@ -159,27 +161,39 @@ D:\bbdown脚本\
 ├─ src\
 │  └─ bbdown_gui\
 │     ├─ __init__.py
-│     ├─ app.py                # Tkinter GUI
-│     ├─ downloader.py         # BBDown 下载逻辑
+│     ├─ app.py                # Tkinter GUI（含视频选择弹窗）
+│     ├─ downloader.py         # BBDown 下载逻辑（含 WBI 签名与风控重试）
 │     └─ transcriber.py        # Faster-Whisper 转文字逻辑
 ├─ tests\
 │  ├─ test_app.py
 │  ├─ test_downloader.py
-│  └─ test_transcriber.py
+│  ├─ test_transcriber.py
+│  └─ test_build_exe.py
 ├─ scripts\
-│  └─ build_exe.py
+│  ├─ build_exe.py             # PyInstaller 打包脚本
+│  └─ release_readme.txt       # 发布说明模板（打包时复制为 README.txt）
 ├─ docs\
 │  ├─ 功能总和文档.md
-│  └─ 问题总和文档.md
-├─ release\
-│  ├─ BilibiliDownloaderUI.exe
-│  └─ README.txt
+│  ├─ 问题总和文档.md
+│  ├─ 本地打包指南.md
+│  ├─ GitHubActions自动发布流程.md
+│  ├─ GitHubRelease发布说明.md
+│  └─ PyInstaller文件夹版和单文件版区别.md
+├─ skills\
+│  ├─ dev-playbook\            # 通用开发工作流 Skill
+│  ├─ bbdown-map\              # 项目地图 Skill
+│  └─ release-playbook\        # 提交与发布流程 Skill
+├─ .github\
+│  └─ workflows\
+│     └─ release.yml           # Release 自动构建流水线
 ├─ README.md
 ├─ pyproject.toml
 ├─ uv.lock
 ├─ .python-version
 └─ .gitignore
 ```
+
+> 打包产物 `build/`、`dist/`、`release/` 均在 `.gitignore` 排除，不提交进 git。
 
 ## 环境准备
 
@@ -208,11 +222,13 @@ uv run bbdown-gui
 - 收藏夹批量下载
 - 视频合集批量下载（链接形如 `https://space.bilibili.com/<mid>/lists/<id>?type=season`）
 - 单个视频链接 / BV 号下载
+- 下载前视频选择弹窗（默认全选，支持全选 / 全不选 / 反选 / 搜索过滤，Shift 范围选、Ctrl 追加切换）
 - 音频 / 视频二选一
 - 选择下载目录
 - 自动检测或手动选择 BBDown
 - 停止下载
 - 隐藏 BBDown 子进程 CMD 窗口
+- 大列表分页拉取（进度日志 + 去重 + 差额警告）
 
 ### 转文字功能
 
@@ -259,31 +275,6 @@ uv run bbdown-gui
 ```bat
 uv run python -m unittest discover -s tests
 ```
-
-## 可选：本地打包 Windows 文件夹版
-
-本项目不再推荐上传大体积 Release 包。若你只是在自己电脑上使用，可以选择源码运行；如果确实需要 exe，可以本地打包。
-
-只需要下载功能时，打包轻量版：
-
-```bat
-uv run python scripts\build_exe.py --edition lite
-```
-
-需要转文字功能时，先安装转文字依赖，再打包 full 版：
-
-```bat
-uv sync --extra transcribe
-uv run python scripts\build_exe.py --edition full
-```
-
-生成：
-
-```text
-dist\BilibiliDownloaderUI\BilibiliDownloaderUI.exe
-```
-
-文件夹版比单文件版启动更快，因为依赖不需要每次启动都解压。`lite` 版只包含下载功能，体积更小；`full` 版包含转文字相关依赖，体积明显更大。不建议把打包结果提交到 git。
 
 ## 常见问题
 

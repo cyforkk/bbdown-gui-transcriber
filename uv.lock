@@ -58,7 +58,7 @@ wheels = [
 
 [[package]]
 name = "bbdown-gui"
-version = "0.2.0"
+version = "0.2.4"
 source = { editable = "." }
 
 [package.optional-dependencies]
